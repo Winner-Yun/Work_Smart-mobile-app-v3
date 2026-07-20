@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "561107054687",
+    "project_id": "worksmart-ai-project-dc1f0",
+    "storage_bucket": "worksmart-ai-project-dc1f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:561107054687:android:089a0d7ce388bca8ac6bea",
+        "android_client_info": {
+          "package_name": "com.example.flutter_worksmart_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBc3hB27F5lVsKb7lnIPMgwcCj8O21AXf4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:561107054687:android:ba0dd85d1515ad41ac6bea",
+        "android_client_info": {
+          "package_name": "com.example.flutter_worksmart_mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBc3hB27F5lVsKb7lnIPMgwcCj8O21AXf4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
