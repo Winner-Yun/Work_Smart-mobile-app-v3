@@ -19,6 +19,8 @@ pubspec.lock
 *.iws
 .idea/
 
+.vscode/
+
 # Java heap dumps
 *.hprof
 
