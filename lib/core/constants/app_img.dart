@@ -6,8 +6,8 @@ class AppImg {
   static String appIcon = 'assets/icons/appIcon.png';
   static String crown = 'assets/icons/icons8-crown-48.png';
   static String pinIcon = 'assets/icons/pinIcon.png';
-  static String appIconDark = 'assets/icons/appIconDarkMode.png';
-  static String appIconLight = 'assets/icons/appIconwebicon.png';
+  static String appIconDark = 'assets/icons/appIcon.png';
+  static String appIconLight = 'assets/icons/appIcon.png';
   static String robotLove = 'assets/images/robotlove.png';
   static String emptyState = 'assets/icons/nodata.png';
   static String takeofGlasses = 'assets/icons/takeoffglas.png';
@@ -15,4 +15,5 @@ class AppImg {
   static String closeOpenEye = 'assets/icons/close_open.png';
   static String lookToLeft = 'assets/icons/look_left.png';
   static String lookToRight = 'assets/icons/look_right.png';
+  static String googleLogo = 'assets/icons/google_icon.webp';
 }

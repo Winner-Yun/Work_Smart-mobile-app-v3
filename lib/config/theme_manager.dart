@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_worksmart_app/core/util/database/database_helper.dart'; 
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 
 class ThemeManager with ChangeNotifier {
   static final ThemeManager _instance = ThemeManager._internal();
@@ -7,7 +7,7 @@ class ThemeManager with ChangeNotifier {
   ThemeManager._internal();
 
   ThemeMode _themeMode = ThemeMode.system;
-  final DatabaseHelper _db = DatabaseHelper(); 
+  final DatabaseHelper _db = DatabaseHelper();
 
   ThemeMode get themeMode => _themeMode;
 

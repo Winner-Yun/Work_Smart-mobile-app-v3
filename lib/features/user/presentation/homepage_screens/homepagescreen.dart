@@ -289,6 +289,10 @@ class _HomePageScreenState extends HomePageLogic {
                           ),
                           const SizedBox(height: 4),
                           Text(
+                            // Developer options / mock-location detection:
+                            // if developer mode (USB debugging, mock location,
+                            // etc.) is detected on the device, show a warning
+                            // label instead of the normal GPS status text.
                             isHoliday
                                 ? AppStrings.tr('holiday_today')
                                 : isDeadlineBlocked

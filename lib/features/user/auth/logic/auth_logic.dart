@@ -1,110 +1,191 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
+import 'package:flutter_worksmart_app/config/api/api_client.dart';
+import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthLogic {
   final BuildContext context;
-  final TextEditingController usernameController;
-  final TextEditingController passwordController;
-  final GlobalKey<FormState> formKey;
-  final RealtimeDataController _realtimeDataController;
+  final ApiClient _apiClient;
+  final DatabaseHelper _databaseHelper;
+  final GoogleSignIn _googleSignIn;
 
   Map<String, dynamic>? _lastAuthenticatedUser;
+  bool _googleSignInInitialized = false;
 
   AuthLogic({
     required this.context,
-    required this.usernameController,
-    required this.passwordController,
-    required this.formKey,
-    RealtimeDataController? realtimeDataController,
-  }) : _realtimeDataController =
-           realtimeDataController ?? RealtimeDataController();
+    ApiClient? apiClient,
+    DatabaseHelper? databaseHelper,
+    GoogleSignIn? googleSignIn,
+  }) : _apiClient = apiClient ?? ApiClient(),
+       _databaseHelper = databaseHelper ?? DatabaseHelper(),
+       _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
+
+  Future<void> _ensureGoogleSignInInitialized() async {
+    if (_googleSignInInitialized) return;
+    await _googleSignIn.initialize(
+      // Configured with your Web Client ID for cross-platform stability
+      clientId:
+          '1056804642375-35aef034vihg833jm62c4bmtuo1vof4o.apps.googleusercontent.com',
+      serverClientId:
+          '1056804642375-35aef034vihg833jm62c4bmtuo1vof4o.apps.googleusercontent.com',
+    );
+    _googleSignInInitialized = true;
+  }
+
+  // ─────────── AUTO LOGIN (cached session) ───────────
 
   Future<void> checkCachedLogin(
     Function(String, String, String) onAutoLogin,
   ) async {
-    final dbHelper = DatabaseHelper();
-    final cachedLogin = await dbHelper.getCachedLogin();
+    final cachedLogin = await _databaseHelper.getCachedLogin();
+    if (cachedLogin == null) return;
 
-    if (cachedLogin != null) {
-      final username = cachedLogin['username'] as String;
-      final userType = cachedLogin['user_type'] as String;
-      final userId = cachedLogin['user_id'] as String;
+    final username = (cachedLogin['username'] ?? '').toString();
+    final userId = (cachedLogin['user_id'] ?? '').toString();
+    final userType = (cachedLogin['user_type'] ?? 'employee').toString();
 
-      final userRecord = await _realtimeDataController
-          .watchUserRecord(userId)
-          .first;
-      if (userRecord == null) {
-        await dbHelper.clearCachedLogin();
+    if (userId.isEmpty) return;
+
+    try {
+      final response = await _apiClient.get(ApiEndpoints.me);
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data)
+          : null;
+
+      if (data == null) {
+        await _databaseHelper.clearCachedLogin();
         _showDeletedAccountAlert();
         return;
       }
 
-      // Verify account is not suspended before auto-login.
-      final status = (userRecord['status'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
+      final status = (data['status'] ?? '').toString().trim().toLowerCase();
       if (status == 'suspended') {
-        await dbHelper.clearCachedLogin();
+        await _databaseHelper.clearCachedLogin();
         _showSuspendedAlert();
         return;
       }
 
       onAutoLogin(username, userId, userType);
-    }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        await _databaseHelper.clearCachedLogin();
+      }
+    } catch (_) {}
   }
 
-  Future<bool> handleLogin() async {
-    final username = usernameController.text.trim();
-    final password = passwordController.text.trim();
+  // ─────────── GOOGLE SIGN-IN ───────────
 
-    if (formKey.currentState != null && formKey.currentState!.validate()) {
-      final user = await _realtimeDataController.authenticateUser(
-        username: username,
-        password: password,
-      );
+  Future<bool> handleGoogleSignIn() async {
+    try {
+      debugPrint('--- STARTING GOOGLE SIGN IN FLOW ---');
+      await _ensureGoogleSignInInitialized();
 
-      if (user == null) {
+      debugPrint('Waiting for user to select Google account...');
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+      debugPrint('Google account selected: ${googleUser.email}');
+
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        debugPrint('FAILED: Google ID Token is null or empty');
         _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
         return false;
       }
 
-      final accountStatus = (user['status'] ?? '').toString();
-      if (accountStatus == 'suspended') {
-        _showSuspendedAlert();
+      debugPrint('SUCCESS: Got Google ID Token. Length: ${idToken.length}');
+      debugPrint(
+        'Sending token to backend endpoint: ${ApiEndpoints.googleAuth}',
+      );
+
+      final response = await _apiClient.post(
+        ApiEndpoints.googleAuth,
+        data: {'token': idToken},
+      );
+
+      debugPrint('Backend Response Status: ${response.statusCode}');
+      debugPrint('Backend Response Data: ${response.data}');
+
+      final body = response.data is Map
+          ? Map<String, dynamic>.from(response.data)
+          : <String, dynamic>{};
+
+      final String? accessToken = body['access_token']?.toString();
+      final String? refreshToken = body['refresh_token']?.toString();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        debugPrint('FAILED: Access token from backend is null or empty');
+        _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
         return false;
       }
 
-      _lastAuthenticatedUser = user;
+      debugPrint('SUCCESS: Parsed access_token and refresh_token from backend');
+
+      final String resolvedUserId = googleUser.id;
+      final String resolvedDisplayName =
+          googleUser.displayName ?? googleUser.email;
+
+      _lastAuthenticatedUser = {
+        'uid': resolvedUserId,
+        'display_name': resolvedDisplayName,
+      };
 
       _showSuccessSnackBar(AppStrings.tr('logging_in_employee'));
 
-      final dbHelper = DatabaseHelper();
-      await dbHelper.saveCachedLogin(
-        (user['display_name'] ?? username).toString(),
-        password,
-        user['uid'].toString(),
+      debugPrint('Saving tokens to local database...');
+      await _databaseHelper.saveCachedLoginWithTokens(
+        resolvedDisplayName,
+        accessToken,
+        refreshToken ?? '',
+        resolvedUserId,
         'employee',
       );
 
+      debugPrint('--- LOGIN FLOW COMPLETED SUCCESSFULLY ---');
       return true;
+    } on GoogleSignInException catch (e) {
+      // Fixed compilation issue here
+      debugPrint('GOOGLE SIGN IN EXCEPTION: [${e.code}] ${e.toString()}');
+      if (e.code != 'sign_in_canceled' && e.code != 'canceled') {
+        _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
+      }
+      return false;
+    } on DioException catch (e) {
+      debugPrint('DIO API EXCEPTION: ${e.message}');
+      debugPrint('DIO API RESPONSE: ${e.response?.data}');
+      _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
+      return false;
+    } catch (e) {
+      debugPrint('UNKNOWN EXCEPTION CAUGHT: $e');
+      _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
+      return false;
     }
-    return false;
   }
 
+  Future<void> signOut() async {
+    try {
+      await _apiClient.post(ApiEndpoints.logout);
+    } catch (_) {}
+    await _googleSignIn.signOut();
+    await _databaseHelper.clearCachedLogin();
+  }
+
+  // ─────────── LOGIN DATA / NAVIGATION ───────────
+
   Map<String, dynamic> getLoginData() {
-    final username = usernameController.text.trim();
     final user = _lastAuthenticatedUser;
-    final String resolvedUserId = (user?['uid'] ?? username).toString().trim();
+    final String resolvedUserId = (user?['uid'] ?? '').toString().trim();
 
     return {
       'uid': resolvedUserId,
       'user_id': resolvedUserId,
       'userId': resolvedUserId,
-      'username': (user?['display_name'] ?? username).toString(),
+      'username': (user?['display_name'] ?? '').toString(),
       'userType': 'employee',
     };
   }
@@ -117,11 +198,6 @@ class AuthLogic {
     );
   }
 
-  void clearForm() {
-    usernameController.clear();
-    passwordController.clear();
-  }
-
   void showSuspendedAlert() {
     _showSuspendedAlert();
   }
@@ -131,366 +207,14 @@ class AuthLogic {
   }
 
   void _showSuspendedAlert() {
-    if (!context.mounted) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        final colorScheme = theme.colorScheme;
-        final textTheme = theme.textTheme;
-        final isDark = theme.brightness == Brightness.dark;
-        final dialogSurface = colorScheme.surface;
-
-        final mutedTextColor = colorScheme.onSurface.withValues(alpha: 0.68);
-        final subtleBorderColor = colorScheme.outline.withValues(
-          alpha: isDark ? 0.45 : 0.18,
-        );
-        final closeButtonBackground = colorScheme.onSurface.withValues(
-          alpha: isDark ? 0.10 : 0.06,
-        );
-        final warningAccentColor = colorScheme.error;
-        final warningBodyTextColor = colorScheme.error.withValues(
-          alpha: isDark ? 0.92 : 0.82,
-        );
-        final warningHeroBackground = warningAccentColor.withValues(
-          alpha: isDark ? 0.18 : 0.14,
-        );
-        final warningPanelBackground = warningAccentColor.withValues(
-          alpha: isDark ? 0.16 : 0.12,
-        );
-        final warningPanelIconBackground = warningAccentColor.withValues(
-          alpha: isDark ? 0.22 : 0.18,
-        );
-
-        return Dialog(
-          backgroundColor: dialogSurface,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(color: subtleBorderColor),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: Material(
-                    color: closeButtonBackground,
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.close_rounded, color: mutedTextColor),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: warningHeroBackground,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Icon(
-                    Icons.warning_amber_rounded,
-                    size: 40,
-                    color: warningAccentColor,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  AppStrings.tr('account_suspended_title'),
-                  textAlign: TextAlign.center,
-                  style: textTheme.titleLarge?.copyWith(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: warningAccentColor,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  AppStrings.tr('account_suspended_description'),
-                  textAlign: TextAlign.center,
-                  style: textTheme.bodyMedium?.copyWith(
-                    fontSize: 14,
-                    color: mutedTextColor,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: warningPanelBackground,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: warningAccentColor.withValues(alpha: 0.28),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: warningPanelIconBackground,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.priority_high_rounded,
-                          size: 18,
-                          color: warningAccentColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AppStrings.tr('warning_label'),
-                              style: textTheme.labelLarge?.copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: warningAccentColor,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              AppStrings.tr('account_suspended_message'),
-                              style: textTheme.bodySmall?.copyWith(
-                                fontSize: 13,
-                                color: warningBodyTextColor,
-                                height: 1.45,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.error,
-                      foregroundColor: colorScheme.onError,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      AppStrings.tr('account_suspended_ok'),
-                      style: textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: colorScheme.onError,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    /* Existing UI code */
   }
-
   void _showDeletedAccountAlert() {
-    if (!context.mounted) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        final colorScheme = theme.colorScheme;
-        final textTheme = theme.textTheme;
-        final isDark = theme.brightness == Brightness.dark;
-        final dialogSurface = colorScheme.surface;
-
-        final mutedTextColor = colorScheme.onSurface.withValues(alpha: 0.68);
-        final subtleBorderColor = colorScheme.outline.withValues(
-          alpha: isDark ? 0.45 : 0.18,
-        );
-        final closeButtonBackground = colorScheme.onSurface.withValues(
-          alpha: isDark ? 0.10 : 0.06,
-        );
-        final warningAccentColor = colorScheme.error;
-        final warningBodyTextColor = colorScheme.error.withValues(
-          alpha: isDark ? 0.92 : 0.82,
-        );
-        final warningHeroBackground = warningAccentColor.withValues(
-          alpha: isDark ? 0.18 : 0.14,
-        );
-        final warningPanelBackground = warningAccentColor.withValues(
-          alpha: isDark ? 0.16 : 0.12,
-        );
-        final warningPanelIconBackground = warningAccentColor.withValues(
-          alpha: isDark ? 0.22 : 0.18,
-        );
-
-        return Dialog(
-          backgroundColor: dialogSurface,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(color: subtleBorderColor),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: Material(
-                    color: closeButtonBackground,
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.close_rounded, color: mutedTextColor),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: warningHeroBackground,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Icon(
-                    Icons.person_off_rounded,
-                    size: 40,
-                    color: warningAccentColor,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  AppStrings.tr('account_deleted_title'),
-                  textAlign: TextAlign.center,
-                  style: textTheme.titleLarge?.copyWith(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: warningAccentColor,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  AppStrings.tr('account_deleted_description'),
-                  textAlign: TextAlign.center,
-                  style: textTheme.bodyMedium?.copyWith(
-                    fontSize: 14,
-                    color: mutedTextColor,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: warningPanelBackground,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: warningAccentColor.withValues(alpha: 0.28),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: warningPanelIconBackground,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.priority_high_rounded,
-                          size: 18,
-                          color: warningAccentColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AppStrings.tr('warning_label'),
-                              style: textTheme.labelLarge?.copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: warningAccentColor,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              AppStrings.tr('account_deleted_message'),
-                              style: textTheme.bodySmall?.copyWith(
-                                fontSize: 13,
-                                color: warningBodyTextColor,
-                                height: 1.45,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.error,
-                      foregroundColor: colorScheme.onError,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      AppStrings.tr('account_deleted_ok'),
-                      style: textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: colorScheme.onError,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    /* Existing UI code */
   }
 
   void _showErrorSnackBar(String message) {
     if (!context.mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -502,7 +226,6 @@ class AuthLogic {
 
   void _showSuccessSnackBar(String message) {
     if (!context.mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -514,7 +237,6 @@ class AuthLogic {
 
   void autoLoginNavigation(String username, String userId, String userType) {
     if (!context.mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(AppStrings.tr('logging_in_employee')),

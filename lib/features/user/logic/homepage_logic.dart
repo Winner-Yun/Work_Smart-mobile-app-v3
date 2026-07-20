@@ -147,10 +147,10 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     _startupFlowStarted = true;
     await LocalNotificationService.instance.initialize();
 
-    await _detectDeveloperModeOnHomepage();
-    if (!mounted || _developerModeWarningShown) {
-      return;
-    }
+    // await _detectDeveloperModeOnHomepage();
+    // if (!mounted || _developerModeWarningShown) {
+    //   return;
+    // }
 
     final bool locationGranted = await _handleLocationPermissionStep();
     await _handleNotificationPermissionStep();

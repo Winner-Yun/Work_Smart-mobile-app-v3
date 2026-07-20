@@ -28,7 +28,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5, // Bumped to 5 for OAuth Tokens
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE settings (
@@ -46,7 +46,9 @@ class DatabaseHelper {
             user_id TEXT NOT NULL,
             session_token TEXT NOT NULL,
             session_expires_at INTEGER NOT NULL,
-            session_issued_at INTEGER NOT NULL
+            session_issued_at INTEGER NOT NULL,
+            access_token TEXT,
+            refresh_token TEXT
           )
         ''');
       },
@@ -56,21 +58,24 @@ class DatabaseHelper {
             await db.execute(
               'ALTER TABLE login_cache ADD COLUMN session_token TEXT',
             );
-          } on DatabaseException catch (e) {
-            e.toString();
-          }
-
-          try {
             await db.execute(
               'ALTER TABLE login_cache ADD COLUMN session_expires_at INTEGER',
+            );
+            await db.execute(
+              'ALTER TABLE login_cache ADD COLUMN session_issued_at INTEGER',
             );
           } on DatabaseException catch (e) {
             e.toString();
           }
-
+        }
+        // New V5 Migration for OAuth Tokens
+        if (oldVersion < 5) {
           try {
             await db.execute(
-              'ALTER TABLE login_cache ADD COLUMN session_issued_at INTEGER',
+              'ALTER TABLE login_cache ADD COLUMN access_token TEXT',
+            );
+            await db.execute(
+              'ALTER TABLE login_cache ADD COLUMN refresh_token TEXT',
             );
           } on DatabaseException catch (e) {
             e.toString();
@@ -118,6 +123,8 @@ class DatabaseHelper {
   /// =========================
   /// LOGIN CACHE
   /// =========================
+
+  // Kept for backward compatibility if used elsewhere
   Future<void> saveCachedLogin(
     String username,
     String password,
@@ -156,18 +163,83 @@ class DatabaseHelper {
     }
   }
 
+  /// =========================
+  /// NEW OAUTH TOKEN METHODS
+  /// =========================
+
+  Future<void> saveCachedLoginWithTokens(
+    String username,
+    String accessToken,
+    String refreshToken,
+    String userId,
+    String userType, {
+    DateTime? sessionExpiresAt,
+  }) async {
+    final issuedAt = DateTime.now().toUtc();
+    final expiresAt =
+        (sessionExpiresAt ?? issuedAt.add(_defaultSessionDuration)).toUtc();
+
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('username', username);
+      await prefs.setString('access_token', accessToken);
+      await prefs.setString('refresh_token', refreshToken);
+      await prefs.setString('password', ''); // Compatibility fallback
+      await prefs.setString('user_id', userId);
+      await prefs.setString('user_type', userType);
+      await prefs.remove('session_token');
+      await prefs.setInt(
+        'session_expires_at',
+        expiresAt.millisecondsSinceEpoch,
+      );
+      await prefs.setInt('session_issued_at', issuedAt.millisecondsSinceEpoch);
+    } else {
+      final db = await database;
+      await db!.delete('login_cache');
+      await db.insert('login_cache', {
+        'username': username,
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+        'password': '', // Compatibility fallback
+        'user_id': userId,
+        'user_type': userType,
+        'session_token': '',
+        'session_expires_at': expiresAt.millisecondsSinceEpoch,
+        'session_issued_at': issuedAt.millisecondsSinceEpoch,
+      });
+    }
+  }
+
+  Future<void> updateTokens(String accessToken, String refreshToken) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('access_token', accessToken);
+      await prefs.setString('refresh_token', refreshToken);
+    } else {
+      final db = await database;
+      await db!.update('login_cache', {
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+      });
+    }
+  }
+
   Future<Map<String, dynamic>?> getCachedLogin() async {
     Map<String, dynamic>? rawCache;
 
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('username');
-      final password = prefs.getString('password');
       final userId = prefs.getString('user_id');
       final userType = prefs.getString('user_type');
 
+      // Look for access_token first, fallback to old password field
+      final accessToken =
+          prefs.getString('access_token') ?? prefs.getString('password');
+      final refreshToken = prefs.getString('refresh_token');
+
       if (username == null ||
-          password == null ||
+          accessToken == null ||
           userId == null ||
           userType == null) {
         return null;
@@ -175,7 +247,9 @@ class DatabaseHelper {
 
       rawCache = {
         'username': username,
-        'password': password,
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+        'password': accessToken, // For backward compatibility
         'user_id': userId,
         'user_type': userType,
         'session_expires_at': prefs.getInt('session_expires_at'),
@@ -187,6 +261,8 @@ class DatabaseHelper {
 
       if (maps.isNotEmpty) {
         rawCache = Map<String, dynamic>.from(maps.first);
+        // Fallback for mobile
+        rawCache['access_token'] ??= rawCache['password'];
       }
     }
 
@@ -199,6 +275,8 @@ class DatabaseHelper {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('username');
       await prefs.remove('password');
+      await prefs.remove('access_token');
+      await prefs.remove('refresh_token');
       await prefs.remove('user_id');
       await prefs.remove('user_type');
       await prefs.remove('session_token');
@@ -214,12 +292,14 @@ class DatabaseHelper {
     Map<String, dynamic> rawCache,
   ) async {
     final username = rawCache['username']?.toString();
-    final password = rawCache['password']?.toString();
+    final accessToken = (rawCache['access_token'] ?? rawCache['password'])
+        ?.toString();
+    final refreshToken = rawCache['refresh_token']?.toString();
     final userId = rawCache['user_id']?.toString();
     final userType = rawCache['user_type']?.toString();
 
     if (username == null ||
-        password == null ||
+        accessToken == null ||
         userId == null ||
         userType == null) {
       await clearCachedLogin();
@@ -234,9 +314,11 @@ class DatabaseHelper {
           .add(_defaultSessionDuration)
           .millisecondsSinceEpoch;
 
-      await saveCachedLogin(
+      // Re-save to establish expiration
+      await saveCachedLoginWithTokens(
         username,
-        password,
+        accessToken,
+        refreshToken ?? '',
         userId,
         userType,
         sessionExpiresAt: DateTime.fromMillisecondsSinceEpoch(
@@ -253,7 +335,9 @@ class DatabaseHelper {
 
     return {
       'username': username,
-      'password': password,
+      'access_token': accessToken,
+      'refresh_token': refreshToken,
+      'password': accessToken, // Backward compatibility
       'user_id': userId,
       'user_type': userType,
       'session_expires_at': sessionExpiresAt,

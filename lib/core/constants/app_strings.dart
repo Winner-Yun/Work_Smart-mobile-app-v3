@@ -1051,7 +1051,7 @@ class AppStrings {
           "គណនីរបស់អ្នកកំពុងប្រើពាក្យសម្ងាត់ដើម។ សូមប្តូរពាក្យសម្ងាត់ឥឡូវនេះ ដើម្បីការពារគណនីរបស់អ្នក។",
       "change_now": "ប្តូរឥឡូវនេះ",
       "later": "ពេលក្រោយ",
-      'developer_mode_alert_title': 'រកឃើញ Developer Mode',
+      'developer_mode_alert_title': 'Developer Mode Detected',
       'developer_mode_alert_message':
           'Developer mode ត្រូវបានបើកលើឧបករណ៍របស់អ្នក។ ដើម្បីសុវត្ថិភាព សូមបិទវា មុនប្រើកម្មវិធីនេះ។',
       'exit_app': 'ចាកចេញពីកម្មវិធី',

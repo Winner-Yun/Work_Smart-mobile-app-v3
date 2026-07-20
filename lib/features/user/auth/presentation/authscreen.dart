@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
-import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/auth/logic/auth_logic.dart';
 
-// Authscreen: Employee login UI (Mobile)
+// Authscreen: Employee login UI (Mobile) — Google sign-in only.
 class Authscreen extends StatefulWidget {
   const Authscreen({super.key});
 
@@ -17,10 +15,6 @@ class Authscreen extends StatefulWidget {
 }
 
 class _AuthscreenState extends State<Authscreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool obscurePassword = true;
   bool _isLoggingIn = false;
   bool _handledSuspendedRouteAlert = false;
   bool _handledDeletedRouteAlert = false;
@@ -31,13 +25,7 @@ class _AuthscreenState extends State<Authscreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize auth logic
-    authLogic = AuthLogic(
-      context: context,
-      usernameController: _usernameController,
-      passwordController: _passwordController,
-      formKey: _formKey,
-    );
+    authLogic = AuthLogic(context: context);
     _checkCachedLogin();
   }
 
@@ -73,16 +61,9 @@ class _AuthscreenState extends State<Authscreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
   // ─────────── LOGIN PROCESSING ───────────
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleGoogleSignIn() async {
     if (_isLoggingIn) {
       return;
     }
@@ -91,7 +72,7 @@ class _AuthscreenState extends State<Authscreen> {
 
     bool loginSucceeded = false;
     try {
-      final isValid = await authLogic.handleLogin();
+      final isValid = await authLogic.handleGoogleSignIn();
       if (!isValid || !mounted) {
         return;
       }
@@ -102,7 +83,6 @@ class _AuthscreenState extends State<Authscreen> {
       if (mounted) {
         final loginData = authLogic.getLoginData();
         authLogic.navigateToMainApp(loginData);
-        authLogic.clearForm();
       }
     } finally {
       if (mounted && !loginSucceeded) {
@@ -194,7 +174,9 @@ class _AuthscreenState extends State<Authscreen> {
                                         vertical: 8,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: Theme.of(
+                                          context,
+                                        ).cardTheme.color,
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Row(
@@ -226,7 +208,7 @@ class _AuthscreenState extends State<Authscreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    AppStrings.tr('smart_hr_system'),
+                                    'Smart HR System',
                                     style: const TextStyle(
                                       color: Colors.white70,
                                       fontSize: 14,
@@ -234,7 +216,7 @@ class _AuthscreenState extends State<Authscreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    AppStrings.tr('welcome'),
+                                    'Welcome Back',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 32,
@@ -274,7 +256,7 @@ class _AuthscreenState extends State<Authscreen> {
                           ),
                         ),
                         padding: const EdgeInsets.all(24),
-                        child: _buildLoginForm(theme),
+                        child: _buildGoogleSignInPanel(theme),
                       ),
                     ),
                   ),
@@ -353,179 +335,220 @@ class _AuthscreenState extends State<Authscreen> {
     );
   }
 
-  Widget _buildLoginForm(ThemeData theme) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Column(
-              children: [
-                Text(
-                  AppStrings.tr('smart_hr_management'),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  AppStrings.tr('login_subtitle_employee'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
+  // ─────────── GOOGLE SIGN-IN PANEL ───────────
+  // Replaces the old username/password form: sign-up and login are the
+  // same action here — the backend upserts the account on first sign-in.
+  Widget _buildGoogleSignInPanel(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Smart HR Management',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurface,
           ),
-
-          const SizedBox(height: 24),
-          Text(
-            AppStrings.tr('username_or_id'),
-            style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Sign in to manage your attendance, leave, and notifications in one place.',
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            fontSize: 13,
+            height: 1.5,
           ),
-          const SizedBox(height: 8),
-          Theme(
-            data: theme.copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                cursorColor: theme.colorScheme.primary,
-                selectionHandleColor: theme.colorScheme.primary,
-                selectionColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.2,
-                ),
+        ),
+        const SizedBox(height: 28),
+        _buildFeatureRow(
+          theme,
+          icon: Icons.face_retouching_natural_rounded,
+          title: 'Face Attendance',
+          subtitle: 'Check in and out with a quick face scan',
+        ),
+        const SizedBox(height: 16),
+        _buildFeatureRow(
+          theme,
+          icon: Icons.event_available_rounded,
+          title: 'Leave Management',
+          subtitle: 'Apply for leave and track approval status',
+        ),
+        const SizedBox(height: 16),
+        _buildFeatureRow(
+          theme,
+          icon: Icons.notifications_active_rounded,
+          title: 'Instant Notifications',
+          subtitle: 'Stay updated on approvals and announcements',
+        ),
+        const SizedBox(height: 32),
+        Row(
+          children: [
+            Expanded(
+              child: Divider(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
-            child: TextFormField(
-              controller: _usernameController,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return AppStrings.tr('enter_id_error');
-                }
-                return null;
-              },
-              decoration: InputDecoration(
-                hintText: AppStrings.tr('enter_id_hint'),
-                prefixIcon: Icon(
-                  Icons.person_outline,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            AppStrings.tr('password'),
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Theme(
-            data: theme.copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                cursorColor: theme.colorScheme.primary,
-                selectionHandleColor: theme.colorScheme.primary,
-                selectionColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.2,
-                ),
-              ),
-            ),
-            child: TextFormField(
-              controller: _passwordController,
-              obscureText: obscurePassword,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return AppStrings.tr('enter_password_error');
-                }
-                if (value.length < 6) {
-                  return AppStrings.tr('password_length_error');
-                }
-                return null;
-              },
-              decoration: InputDecoration(
-                hintText: AppStrings.tr('enter_password_hint'),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                  onPressed: () =>
-                      setState(() => obscurePassword = !obscurePassword),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: AlignmentGeometry.centerRight,
-            child: TextButton(
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoute.forgotpassScreen);
-              },
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                AppStrings.tr('forgot_password'),
-                style: TextStyle(color: theme.colorScheme.primary),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _isLoggingIn ? null : _handleLogin,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                'Sign in to continue',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: _isLoggingIn
-                    ? Row(
-                        key: const ValueKey<String>('login-loading'),
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                theme.colorScheme.onPrimary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            AppStrings.tr('logging_in_employee'),
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(
-                        AppStrings.tr('login_button'),
-                        key: const ValueKey<String>('login-text'),
-                        style: TextStyle(
-                          color: theme.colorScheme.onPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+            ),
+            Expanded(
+              child: Divider(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: _isLoggingIn ? null : _handleGoogleSignIn,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.surface,
+              foregroundColor: theme.colorScheme.onSurface,
+              elevation: 0,
+              side: BorderSide(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.18),
+                width: 1.2,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _isLoggingIn
+                  ? Row(
+                      key: const ValueKey<String>('google-login-loading'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Signing in...',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      key: const ValueKey<String>('google-login-text'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(AppImg.googleLogo, width: 22, height: 22),
+                        const SizedBox(width: 14),
+                        Text(
+                          'Continue with Google',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 18),
+        Text.rich(
+          TextSpan(
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.5,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+            children: [
+              TextSpan(text: 'By continuing, you agree to our '),
+              TextSpan(
+                text: 'Terms of Service',
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              TextSpan(text: ' and '),
+              TextSpan(
+                text: 'Privacy Policy',
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const TextSpan(text: '.'),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatureRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: theme.colorScheme.primary, size: 22),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
