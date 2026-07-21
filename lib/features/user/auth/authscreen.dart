@@ -4,9 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/features/user/auth/logic/auth_logic.dart';
+import 'package:flutter_worksmart_app/features/user/auth/auth_logic.dart';
 
-// Authscreen: Employee login UI (Mobile) — Google sign-in only.
 class Authscreen extends StatefulWidget {
   const Authscreen({super.key});
 
@@ -134,7 +133,6 @@ class _AuthscreenState extends State<Authscreen> {
                         ),
                       ),
 
-                      // --- Language Switcher ---
                       Positioned(
                         top: 50,
                         right: 20,

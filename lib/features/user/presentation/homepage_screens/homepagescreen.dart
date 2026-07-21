@@ -12,12 +12,14 @@ class HomePageScreen extends StatefulWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onStartupFlowCompleted;
   final Map<String, dynamic>? loginData;
+  final VoidCallback? onSwitchWorkspace;
 
   const HomePageScreen({
     super.key,
     this.onProfileTap,
     this.onStartupFlowCompleted,
     this.loginData,
+    this.onSwitchWorkspace,
   });
 
   @override

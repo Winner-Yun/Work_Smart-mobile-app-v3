@@ -1,11 +1,11 @@
-/// API base configuration.
+import 'package:flutter_worksmart_app/config/env.dart';
+
 class ApiConfig {
   ApiConfig._();
 
-  /// Reads from --dart-define or defaults to your Vercel backend.
-  static const String baseUrl = String.fromEnvironment(
+  static final String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://smart-atd-backend.vercel.app',
+    defaultValue: Env.apiBaseUrl,
   );
 
   static const Duration connectTimeout = Duration(seconds: 15);

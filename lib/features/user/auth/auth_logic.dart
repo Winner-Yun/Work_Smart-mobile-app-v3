@@ -1,3 +1,5 @@
+// ignore_for_file: unrelated_type_equality_checks
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
@@ -80,6 +82,8 @@ class AuthLogic {
 
   // ─────────── GOOGLE SIGN-IN ───────────
 
+  // ─────────── GOOGLE SIGN-IN ───────────
+
   Future<bool> handleGoogleSignIn() async {
     try {
       debugPrint('--- STARTING GOOGLE SIGN IN FLOW ---');
@@ -98,18 +102,10 @@ class AuthLogic {
         return false;
       }
 
-      debugPrint('SUCCESS: Got Google ID Token. Length: ${idToken.length}');
-      debugPrint(
-        'Sending token to backend endpoint: ${ApiEndpoints.googleAuth}',
-      );
-
       final response = await _apiClient.post(
         ApiEndpoints.googleAuth,
         data: {'token': idToken},
       );
-
-      debugPrint('Backend Response Status: ${response.statusCode}');
-      debugPrint('Backend Response Data: ${response.data}');
 
       final body = response.data is Map
           ? Map<String, dynamic>.from(response.data)
@@ -124,20 +120,35 @@ class AuthLogic {
         return false;
       }
 
-      debugPrint('SUCCESS: Parsed access_token and refresh_token from backend');
+      // FIX: Extract backend user_id first before falling back to googleUser.id
+      final String resolvedUserId =
+          (body['user_id'] ??
+                  body['userId'] ??
+                  body['id'] ??
+                  body['user']?['id'] ??
+                  body['user']?['user_id'] ??
+                  googleUser.id)
+              .toString()
+              .trim();
 
-      final String resolvedUserId = googleUser.id;
       final String resolvedDisplayName =
-          googleUser.displayName ?? googleUser.email;
+          (body['username'] ??
+                  body['name'] ??
+                  googleUser.displayName ??
+                  googleUser.email)
+              .toString();
 
       _lastAuthenticatedUser = {
         'uid': resolvedUserId,
+        'user_id': resolvedUserId,
         'display_name': resolvedDisplayName,
       };
 
       _showSuccessSnackBar(AppStrings.tr('logging_in_employee'));
 
-      debugPrint('Saving tokens to local database...');
+      debugPrint(
+        'Saving tokens to local database with User ID: $resolvedUserId',
+      );
       await _databaseHelper.saveCachedLoginWithTokens(
         resolvedDisplayName,
         accessToken,
@@ -149,7 +160,6 @@ class AuthLogic {
       debugPrint('--- LOGIN FLOW COMPLETED SUCCESSFULLY ---');
       return true;
     } on GoogleSignInException catch (e) {
-      // Fixed compilation issue here
       debugPrint('GOOGLE SIGN IN EXCEPTION: [${e.code}] ${e.toString()}');
       if (e.code != 'sign_in_canceled' && e.code != 'canceled') {
         _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
@@ -157,7 +167,6 @@ class AuthLogic {
       return false;
     } on DioException catch (e) {
       debugPrint('DIO API EXCEPTION: ${e.message}');
-      debugPrint('DIO API RESPONSE: ${e.response?.data}');
       _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
       return false;
     } catch (e) {

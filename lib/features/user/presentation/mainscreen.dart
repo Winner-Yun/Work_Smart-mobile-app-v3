@@ -9,11 +9,10 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/features/user/auth/presentation/change_pas_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/activity_screens/activity_feed_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_attendance_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/home_tab_wrapper.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/profile_screen_web_stub.dart'
     if (dart.library.io) 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/profile_screens.dart';
 
@@ -72,8 +71,8 @@ class _MainScreenState extends State<MainScreen> {
     _userRecordSubscription = _realtimeDataController
         .watchUserRecord(uid)
         .listen((userRecord) {
+          // Guard against null stream events forcing premature logout
           if (userRecord == null) {
-            _forceLogoutForDeletedAccount();
             return;
           }
 
@@ -239,16 +238,6 @@ class _MainScreenState extends State<MainScreen> {
       return;
     }
 
-    final uid = (widget.loginData?['uid'] ?? '').toString().trim();
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ChangePasswordScreen(
-          isFromProfile: true,
-          userId: uid.isEmpty ? null : uid,
-        ),
-      ),
-    );
-
     if (!mounted || _isHandlingSuspendedAccount) {
       return;
     }
@@ -274,25 +263,25 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Future<void> _forceLogoutForDeletedAccount() async {
-    if (_isHandlingSuspendedAccount) {
-      return;
-    }
+  // Future<void> _forceLogoutForDeletedAccount() async {
+  //   if (_isHandlingSuspendedAccount) {
+  //     return;
+  //   }
 
-    _isHandlingSuspendedAccount = true;
-    await _userRecordSubscription?.cancel();
-    await DatabaseHelper().clearCachedLogin();
+  //   _isHandlingSuspendedAccount = true;
+  //   await _userRecordSubscription?.cancel();
+  //   await DatabaseHelper().clearCachedLogin();
 
-    if (!mounted) {
-      return;
-    }
+  //   if (!mounted) {
+  //     return;
+  //   }
 
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoute.authScreen,
-      (route) => false,
-      arguments: {'showDeletedDialog': true},
-    );
-  }
+  //   Navigator.of(context).pushNamedAndRemoveUntil(
+  //     AppRoute.authScreen,
+  //     (route) => false,
+  //     arguments: {'showDeletedDialog': true},
+  //   );
+  // }
 
   // ──────────────── EMPLOYEE APP NAVIGATION ────────────────
   // Renders main tabs: Home, Attendance, Leave Requests, Profile
@@ -302,12 +291,10 @@ class _MainScreenState extends State<MainScreen> {
     final isActivityTab = _currentIndex == 3;
 
     final List<Widget> screens = [
-      HomePageScreen(
+      HomeTabWrapper(
         loginData: widget.loginData,
         onStartupFlowCompleted: () {
-          if (_isHomeStartupFlowCompleted) {
-            return;
-          }
+          if (_isHomeStartupFlowCompleted) return;
           _isHomeStartupFlowCompleted = true;
           _maybePromptPasswordChange(_latestUserRecord);
         },

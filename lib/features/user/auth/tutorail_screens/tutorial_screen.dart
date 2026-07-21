@@ -7,7 +7,7 @@ import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart'; // Added AppStrings
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/features/user/auth/presentation/tutorail_screens/tutorial_content.dart';
+import 'package:flutter_worksmart_app/features/user/auth/tutorail_screens/tutorial_content.dart';
 
 class TutorialScreen extends StatefulWidget {
   const TutorialScreen({super.key});

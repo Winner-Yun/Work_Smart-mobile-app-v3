@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/features/user/auth/presentation/authscreen.dart';
-import 'package:flutter_worksmart_app/features/user/auth/presentation/forgot_pas_screen.dart';
-import 'package:flutter_worksmart_app/features/user/auth/presentation/tutorail_screens/tutorial_screen.dart';
+import 'package:flutter_worksmart_app/features/user/auth/authscreen.dart';
+import 'package:flutter_worksmart_app/features/user/auth/tutorail_screens/tutorial_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/annual_leave_request_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_calendar_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_detail_screen.dart';
@@ -43,12 +42,11 @@ class AppRoute {
   static const String registerFace = '/registerFace';
 
   // ──────────────── ROUTE DEFINITIONS ────────────────
-  // Includes auth routes, admin routes, and employee feature routes
+
   static Map<String, WidgetBuilder> routes = {
     // Auth Routes
     tutorial: (context) => const TutorialScreen(),
     authScreen: (context) => const Authscreen(),
-    forgotpassScreen: (context) => const ForgotPasswordScreen(),
 
     // Main App
     appmain: (context) {

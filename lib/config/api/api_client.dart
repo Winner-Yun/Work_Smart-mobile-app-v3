@@ -3,15 +3,14 @@ import 'package:flutter_worksmart_app/config/api/api_config.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 
-/// Thin Dio wrapper handling base URLs, timeouts, Authorization headers,
-/// and automatic token refreshing.
 class ApiClient {
   ApiClient._internal() {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
-        connectTimeout: const Duration(seconds: 30), // Increased
-        receiveTimeout: const Duration(seconds: 30), // Increased
+
+        connectTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
         sendTimeout: ApiConfig.sendTimeout,
         headers: const {'Content-Type': 'application/json'},
       ),
@@ -30,13 +29,11 @@ class ApiClient {
           handler.next(options);
         },
         onError: (DioException error, handler) async {
-          // If 401 Unauthorized, and it's NOT the refresh endpoint itself, try to refresh
           if (error.response?.statusCode == 401 &&
               error.requestOptions.path != ApiEndpoints.refreshToken) {
             final success = await _refreshToken();
 
             if (success) {
-              // Retry the original request with the newly saved access token
               final cachedLogin = await _databaseHelper.getCachedLogin();
               final String? newAccessToken = cachedLogin?['access_token']
                   ?.toString();
@@ -52,7 +49,6 @@ class ApiClient {
                 }
               }
             } else {
-              // Refresh failed or token invalid, drop the local cache
               await _databaseHelper.clearCachedLogin();
             }
           }
@@ -71,7 +67,6 @@ class ApiClient {
 
   Dio get client => _dio;
 
-  /// Attempts to refresh the JWT session using the stored refresh_token
   Future<bool> _refreshToken() async {
     try {
       final cachedLogin = await _databaseHelper.getCachedLogin();
@@ -105,6 +100,14 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) {
     return _dio.get(endpoint, queryParameters: queryParameters);
+  }
+
+  Future<Response<dynamic>> patch(
+    String endpoint, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  }) {
+    return _dio.patch(endpoint, data: data, queryParameters: queryParameters);
   }
 
   Future<Response<dynamic>> post(String endpoint, {Object? data}) {

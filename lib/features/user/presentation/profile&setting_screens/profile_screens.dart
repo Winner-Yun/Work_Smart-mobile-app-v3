@@ -9,7 +9,6 @@ import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_im
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/features/user/auth/presentation/change_pas_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/setting_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/app_profile_avatar.dart';
@@ -638,18 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildActionTile(IconData icon, String title, BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ResetPasswordScreen(
-              isFromProfile: true,
-              userId: _currentUser.uid,
-              resetEmail: _currentUser.email,
-            ),
-          ),
-        );
-      },
+      onTap: () {},
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
