@@ -33,15 +33,15 @@ class Invite {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'workspace_id': workspaceId,
-        'email': email,
-        'position': position,
-        'role': role,
-        'status': status,
-        'created_at': createdAt,
-        'expires_at': expiresAt,
-      };
+    'id': id,
+    'workspace_id': workspaceId,
+    'email': email,
+    'position': position,
+    'role': role,
+    'status': status,
+    'created_at': createdAt,
+    'expires_at': expiresAt,
+  };
 }
 
 class InviteResponse {
@@ -62,7 +62,8 @@ class InviteResponse {
       page: json['page'] ?? 1,
       limit: json['limit'] ?? 10,
       total: json['total'] ?? 0,
-      data: (json['data'] as List<dynamic>?)
+      data:
+          (json['data'] as List<dynamic>?)
               ?.map((e) => Invite.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
