@@ -429,6 +429,7 @@ class AppStrings {
       'face_pose_right': 'Look right',
       'face_pose_blink_eyes': 'Blink eyes',
       'scan_success': 'Scan Success!',
+      'switch_workspace': 'Switch Workspace',
       'notvideo_passed':
           'មិនមែនជាវីដេអូទេ។ នេះបញ្ជាក់ថាជាមុខមនុស្សពិត មិនមែនជារូបភាព ឬ វីដេអូទេ។',
 

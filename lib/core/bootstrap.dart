@@ -20,9 +20,13 @@ class AppBootstrap {
 
     // Init Firebase and database
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      // Check if Firebase is already initialized to avoid duplicate-app errors
+      // on hot restart or re-entry.
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
       if (kIsWeb) {
         await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
       }

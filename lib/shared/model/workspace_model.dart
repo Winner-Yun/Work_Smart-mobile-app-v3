@@ -29,4 +29,14 @@ class Workspace {
       updatedAt: json['updated_at']?.toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'workspace_name': workspaceName,
+        'description': description,
+        'status': status,
+        'member_count': memberCount,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+      };
 }

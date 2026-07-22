@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +19,15 @@ class DatabaseHelper {
   /// =========================
   Future<Database?> get database async {
     if (kIsWeb) return null; // Web does not use SQLite
+    // Close and reopen if the database was cached from a previous version
+    // to ensure migrations run when the version is bumped.
+    if (_database != null) {
+      final currentVersion = await _database!.getVersion();
+      if (currentVersion < 6) {
+        await _database!.close();
+        _database = null;
+      }
+    }
     if (_database != null) return _database!;
     _database = await _initDatabase();
     return _database!;
@@ -28,7 +39,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5, // Bumped to 5 for OAuth Tokens
+      version: 6, // Bumped to 6 for user_profile_cache table
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE settings (
@@ -49,6 +60,15 @@ class DatabaseHelper {
             session_issued_at INTEGER NOT NULL,
             access_token TEXT,
             refresh_token TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE user_profile_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            profile_data TEXT NOT NULL,
+            cached_at INTEGER NOT NULL
           )
         ''');
       },
@@ -77,6 +97,21 @@ class DatabaseHelper {
             await db.execute(
               'ALTER TABLE login_cache ADD COLUMN refresh_token TEXT',
             );
+          } on DatabaseException catch (e) {
+            e.toString();
+          }
+        }
+        // New V6 Migration for user_profile_cache table
+        if (oldVersion < 6) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS user_profile_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                profile_data TEXT NOT NULL,
+                cached_at INTEGER NOT NULL
+              )
+            ''');
           } on DatabaseException catch (e) {
             e.toString();
           }
@@ -285,6 +320,77 @@ class DatabaseHelper {
     } else {
       final db = await database;
       await db!.delete('login_cache');
+    }
+  }
+
+  /// =========================
+  /// USER PROFILE CACHE
+  /// =========================
+
+  /// Saves the user profile data to local storage (SQLite on mobile,
+  /// SharedPreferences on web) so it can be loaded without a network
+  /// request on subsequent app starts.
+  Future<void> saveUserProfile(Map<String, dynamic> profileData) async {
+    final userId =
+        profileData['_id']?.toString() ??
+        profileData['id']?.toString() ??
+        'default';
+    final cachedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final profileJson = jsonEncode(profileData);
+
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_profile_data', profileJson);
+      await prefs.setInt('user_profile_cached_at', cachedAt);
+      await prefs.setString('user_profile_id', userId);
+    } else {
+      final db = await database;
+      await db!.delete('user_profile_cache');
+      await db.insert('user_profile_cache', {
+        'user_id': userId,
+        'profile_data': profileJson,
+        'cached_at': cachedAt,
+      });
+    }
+  }
+
+  /// Retrieves the cached user profile data from local storage.
+  /// Returns null if no cached data exists.
+  Future<Map<String, dynamic>?> getUserProfile() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final profileJson = prefs.getString('user_profile_data');
+      if (profileJson == null) return null;
+      try {
+        return Map<String, dynamic>.from(jsonDecode(profileJson));
+      } catch (e) {
+        debugPrint('Failed to decode cached user profile: $e');
+        return null;
+      }
+    } else {
+      final db = await database;
+      final maps = await db!.query('user_profile_cache');
+      if (maps.isEmpty) return null;
+      final profileJson = maps.first['profile_data'] as String;
+      try {
+        return Map<String, dynamic>.from(jsonDecode(profileJson));
+      } catch (e) {
+        debugPrint('Failed to decode cached user profile: $e');
+        return null;
+      }
+    }
+  }
+
+  /// Clears the cached user profile data.
+  Future<void> clearUserProfile() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_profile_data');
+      await prefs.remove('user_profile_cached_at');
+      await prefs.remove('user_profile_id');
+    } else {
+      final db = await database;
+      await db!.delete('user_profile_cache');
     }
   }
 

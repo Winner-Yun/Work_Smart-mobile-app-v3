@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/features/user/logic/workspace_screen_logic.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 
@@ -20,9 +21,65 @@ class WorkspaceScreen extends StatefulWidget {
 }
 
 class _WorkspaceScreenState extends WorkspaceScreenLogic {
-  String get _userName => currentUser?.name ?? 'User';
-  String? get _avatarUrl => currentUser?.avatar;
+  String get _userName {
+    if (currentUser != null && currentUser!.name.trim().isNotEmpty) {
+      return currentUser!.name;
+    }
+    final data = widget.loginData;
+    if (data != null) {
+      final nested = data['user'] is Map ? data['user'] as Map : null;
+      final name = (nested?['name'] ?? data['name'] ?? data['username'] ?? '')
+          .toString()
+          .trim();
+      if (name.isNotEmpty) return name;
+    }
+    return 'User';
+  }
+
+  String? get _avatarUrl {
+    if (currentUser != null && currentUser!.avatar.trim().isNotEmpty) {
+      return currentUser!.avatar;
+    }
+    final data = widget.loginData;
+    if (data != null) {
+      final nested = data['user'] is Map ? data['user'] as Map : null;
+      final avatar = (nested?['avatar'] ?? data['avatar'] ?? '')
+          .toString()
+          .trim();
+      if (avatar.isNotEmpty) return avatar;
+    }
+    return null;
+  }
+
   String _searchQuery = '';
+  late final ScrollController _scrollController;
+  bool _scrolledUp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    // Triggers refresh when over-scrolling past -100 pixels (pulling down)
+    if (_scrollController.position.pixels < -100 && !_scrolledUp) {
+      _scrolledUp = true;
+      onRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
+
+  bool get scrolledUp => _scrolledUp;
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   List<Workspace> get _filteredWorkspaces {
     if (_searchQuery.trim().isEmpty) return workspaces;
@@ -54,16 +111,22 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                     const SizedBox(height: 8),
                     _buildHeader(),
                     const SizedBox(height: 16),
-                    if (!isLoading && workspaces.isNotEmpty) ...[
-                      _buildSearchBar(),
-                      const SizedBox(height: 16),
-                    ],
-                    Expanded(child: _buildBody()),
+                    _buildSearchBar(), // Always displayed
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: Stack(
+                        alignment: Alignment.topCenter,
+                        children: [
+                          _buildBody(),
+                          _buildPullToRefreshIndicator(), // Custom visual indicator
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-            if (workspaces.isNotEmpty && !isLoading) _buildBottomBar(),
+            _buildBottomBar(), // Always displayed
           ],
         ),
       ),
@@ -73,9 +136,17 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (isLoading) {
+    final bool showSkeleton =
+        (isLoading || isRefreshing) &&
+        currentUser == null &&
+        _avatarUrl == null &&
+        _userName == 'User' &&
+        (widget.loginData == null || widget.loginData!.isEmpty);
+
+    if (showSkeleton) {
       return AppBar(
         elevation: 0,
+        toolbarHeight: 80,
         backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
         title: Row(
@@ -95,8 +166,15 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       );
     }
 
+    final String displayName = _userName;
+    final String? avatar = _avatarUrl;
+    final String initial = displayName.isNotEmpty
+        ? displayName[0].toUpperCase()
+        : 'U';
+
     return AppBar(
       elevation: 0,
+      toolbarHeight: 80,
       backgroundColor: Colors.transparent,
       automaticallyImplyLeading: false,
       title: Row(
@@ -108,19 +186,24 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
                   width: 2,
                 ),
               ),
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
-                backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
-                    ? NetworkImage(_avatarUrl!)
+                backgroundColor: theme.colorScheme.primary.withValues(
+                  alpha: 0.12,
+                ),
+                backgroundImage: avatar != null && avatar.isNotEmpty
+                    ? NetworkImage(avatar)
                     : null,
-                child: (_avatarUrl == null || _avatarUrl!.isEmpty)
+                onBackgroundImageError: avatar != null && avatar.isNotEmpty
+                    ? (_, __) {}
+                    : null,
+                child: (avatar == null || avatar.isEmpty)
                     ? Text(
-                        _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
+                        initial,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: theme.colorScheme.primary,
@@ -131,22 +214,25 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
             ),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Welcome back,',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-              ),
-              Text(
-                _userName,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome back,',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
-              ),
-            ],
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -159,7 +245,13 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                 Icons.notifications_none_rounded,
                 color: theme.iconTheme.color,
               ),
-              onPressed: () {},
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  AppRoute.notificationScreen,
+                  arguments: widget.loginData,
+                );
+              },
             ),
             Positioned(
               top: 14,
@@ -192,18 +284,20 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
-                color: Theme.of(context).colorScheme.onBackground,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '${workspaces.length}',
+                isLoading || isRefreshing ? '-' : '${workspaces.length}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -234,6 +328,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       child: TextField(
         onChanged: (val) => setState(() => _searchQuery = val),
         style: const TextStyle(fontSize: 13),
+        enabled: !isLoading && !isRefreshing,
         decoration: InputDecoration(
           hintText: 'Search workspace...',
           hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
@@ -249,41 +344,111 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     );
   }
 
+  // --- NEW: Custom Visual Indicator ---
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        // Get how far the user has pulled down past the top
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        // Hide it if we aren't pulling, or if it's already loading
+        if (overscroll <= 0 || isLoading || isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        // Calculate progress to the -100 threshold
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95; // Almost at threshold
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2), // Moves down slightly as user pulls
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28, // Rotates fully based on pull distance
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildBody() {
-    if (isLoading) return _buildSkeletonLoader();
+    if (isLoading || isRefreshing) return _buildSkeletonLoader();
 
     if (errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.red.shade300,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              errorMessage!,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Retry'),
-            ),
-          ],
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: Colors.red.shade300,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                errorMessage!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    if (workspaces.isEmpty || _filteredWorkspaces.isEmpty)
+    if (workspaces.isEmpty || _filteredWorkspaces.isEmpty) {
       return _buildEmptyState();
+    }
 
     return GridView.builder(
-      physics: const BouncingScrollPhysics(),
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 14,
@@ -313,7 +478,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected
-              ? primaryColor.withOpacity(isDark ? 0.15 : 0.04)
+              ? primaryColor.withValues(alpha: isDark ? 0.15 : 0.04)
               : (Theme.of(context).cardTheme.color ??
                     (isDark ? Colors.grey.shade900 : Colors.white)),
           borderRadius: BorderRadius.circular(18),
@@ -326,13 +491,13 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: primaryColor.withOpacity(0.2),
+                color: primaryColor.withValues(alpha: 0.2),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               )
             else
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -350,8 +515,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        primaryColor.withOpacity(0.2),
-                        primaryColor.withOpacity(0.08),
+                        primaryColor.withValues(alpha: 0.2),
+                        primaryColor.withValues(alpha: 0.08),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -484,21 +649,29 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
 
   Widget _buildSkeletonLoader() {
     return GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
+      controller:
+          _scrollController, // Added to allow scroll-to-refresh even when loading
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
         childAspectRatio: 0.80,
       ),
-      itemCount: 4,
+      itemCount: 6,
       itemBuilder: (context, index) {
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Theme.of(context).cardTheme.color ?? Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey.shade800
+                  : Colors.grey.shade200,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,7 +682,12 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               const SizedBox(height: 6),
               _buildSkeletonBox(width: 110, height: 10),
               const SizedBox(height: 12),
-              const Divider(height: 1),
+              Divider(
+                height: 1,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade200,
+              ),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -530,13 +708,17 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
 
     return Center(
       child: SingleChildScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.08),
+                color: primaryColor.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -602,7 +784,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -612,7 +794,10 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         width: double.infinity,
         height: 50,
         child: ElevatedButton(
-          onPressed: hasSelection && !isLoading ? onConfirmSelection : null,
+          // Disabled while loading/refreshing or if no workspace is selected
+          onPressed: hasSelection && !isLoading && !isRefreshing
+              ? onConfirmSelection
+              : null,
           style: ElevatedButton.styleFrom(
             elevation: hasSelection ? 2 : 0,
             backgroundColor: primaryColor,

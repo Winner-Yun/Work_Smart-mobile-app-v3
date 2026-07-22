@@ -56,9 +56,10 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
   }
 
   Future<void> _handleSwitchWorkspace() async {
-    // Optional: Clear the saved ID from storage if you want to force selection on restart
-    // final prefs = await SharedPreferences.getInstance();
-    // await prefs.remove(_workspaceIdKey);
+    // Clear the saved workspace ID from storage so the user is
+    // forced to re-select a workspace on the next app start.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_workspaceIdKey);
 
     if (mounted) {
       setState(() {

@@ -9,4 +9,11 @@ class ApiEndpoints {
 
   // workspace
   static const String myWorkspaces = '/workspace/me';
+
+  // INVITE
+  static const String myInvites = '/invite/me';
+
+  // INVITE ACTIONS
+  static String acceptInvite(String inviteId) => '/invite/$inviteId/accept';
+  static String rejectInvite(String inviteId) => '/invite/$inviteId/reject';
 }

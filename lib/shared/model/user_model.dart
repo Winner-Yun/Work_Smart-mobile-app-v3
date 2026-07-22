@@ -25,4 +25,13 @@ class UserModel {
       status: json['status']?.toString() ?? 'unknown',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        '_id': id,
+        'email': email,
+        'name': name,
+        'avatar': avatar,
+        'gender': gender,
+        'status': status,
+      };
 }

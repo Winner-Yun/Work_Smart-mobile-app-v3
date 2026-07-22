@@ -10,11 +10,15 @@ import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/map_styles.dart';
 import 'package:flutter_worksmart_app/core/util/database/attendance_data.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/database/office_data.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
 import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
+import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -30,30 +34,17 @@ abstract class HomePageLogic extends State<HomePageScreen> {
       RealtimeDataController();
 
   // --- Data Models ---
-  late UserProfile currentUser;
-  late List<UserProfile> allEmployees;
+  late UserModel currentUser;
+  late List<UserModel> allEmployees;
   late String? loggedInUserId;
 
-  List<Map<String, dynamic>> _userRecordsData = usersFinalData
+  final List<Map<String, dynamic>> _userRecordsData = usersFinalData
       .map((item) => Map<String, dynamic>.from(item))
       .toList();
-  Map<String, dynamic> _officeConfigData = Map<String, dynamic>.from(
+  final Map<String, dynamic> _officeConfigData = Map<String, dynamic>.from(
     officeMasterData,
   );
-  Map<String, dynamic> _currentFaceBiometricsData = <String, dynamic>{};
-  StreamSubscription<List<Map<String, dynamic>>>? _userRecordsSubscription;
-  StreamSubscription<Map<String, dynamic>?>? _officeConfigSubscription;
-  StreamSubscription<List<Map<String, dynamic>>>?
-  _attendanceNotificationSubscription;
-  final Map<String, StreamSubscription<List<Map<String, dynamic>>>>
-  _leaveRecordSubscriptions =
-      <String, StreamSubscription<List<Map<String, dynamic>>>>{};
-  final Set<String> _leaveRecordPrimedUsers = <String>{};
-  String? _activeOfficeId;
-  bool _attendanceWatcherPrimed = false;
-  final Map<String, String> _leaveStatusByKey = <String, String>{};
-  final Map<String, String> _attendanceCheckInByKey = <String, String>{};
-  final Map<String, String> _attendanceCheckOutByKey = <String, String>{};
+  final Map<String, dynamic> _currentFaceBiometricsData = <String, dynamic>{};
 
   // --- State Variables ---
   GoogleMapController? mapController;
@@ -96,8 +87,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   int checkOutCooldownSeconds = 0;
   Timer? _checkOutCooldownTimer;
   Timer? _deadlineRefreshTimer;
-  bool _isAutoAbsentSaveInProgress = false;
-  String? _lastAutoAbsentSaveKey;
 
   // --- Map Objects ---
   Set<Marker> markers = {};
@@ -129,8 +118,8 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   void initState() {
     super.initState();
     loggedInUserId = widget.loginData?['uid'];
-    _loadData();
-    _listenRealtimeData();
+    _fetchAndSaveUserProfile();
+    _loadAllData();
     setupOfficeMapObjects();
     generateProfileMarker();
 
@@ -287,7 +276,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   }
 
   Future<void> _handleNotificationPermissionStep() async {
-    if (!_isNotificationEnabled() || kIsWeb) {
+    if (kIsWeb) {
       return;
     }
 
@@ -406,7 +395,34 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     return action ?? _PermissionResolutionAction.notNow;
   }
 
-  void _loadData() {
+  /// Loads the cached user profile from the local database.
+  /// This is used as a fallback when the static data doesn't contain
+  /// the user's profile information (name, gender, etc.).
+  Future<Map<String, dynamic>?> _loadCachedUserProfile() async {
+    try {
+      return await DatabaseHelper().getUserProfile();
+    } catch (e) {
+      debugPrint('[_loadCachedUserProfile] Error loading from DB: $e');
+      return null;
+    }
+  }
+
+  /// Fetches the user profile from the /auth/me API endpoint and saves
+  /// it to the local database so it can be used on subsequent app starts
+  /// without requiring a network connection.
+  Future<void> _fetchAndSaveUserProfile() async {
+    try {
+      final userRepository = UserRepository(UserService());
+      final UserModel userModel = await userRepository.getUserProfile();
+      final Map<String, dynamic> userJson = userModel.toJson();
+      await DatabaseHelper().saveUserProfile(userJson);
+      debugPrint('[_fetchAndSaveUserProfile] Saved user profile to local DB');
+    } catch (e) {
+      debugPrint('[_fetchAndSaveUserProfile] Error: $e');
+    }
+  }
+
+  Future<void> _loadData() async {
     final userDataSource = _userRecordsData.isNotEmpty
         ? _userRecordsData
         : usersFinalData;
@@ -419,7 +435,24 @@ abstract class HomePageLogic extends State<HomePageScreen> {
       (user) => user['uid'] == loggedInUserId,
       orElse: () => safeUserDataSource.first,
     );
-    currentUser = UserProfile.fromJson(currentUserData);
+
+    // If the user data from static sources doesn't have a proper name or
+    // gender, try loading the cached profile from the local database.
+    // This ensures the homepage displays the correct profile name and gender
+    // (Mr/Ms) that were saved by the workspace screen.
+    final String staticUserName =
+        (currentUserData['display_name'] ?? currentUserData['name'])
+            ?.toString() ??
+        '';
+    Map<String, dynamic>? effectiveUserData = currentUserData;
+    if (staticUserName.trim().isEmpty) {
+      final cachedProfile = await _loadCachedUserProfile();
+      if (cachedProfile != null) {
+        effectiveUserData = cachedProfile;
+      }
+    }
+
+    currentUser = UserModel.fromJson(effectiveUserData);
     final Map<String, dynamic> faceData = _currentFaceBiometricsData;
     final normalizedFaceStatus = (faceData['face_status'] ?? '')
         .toString()
@@ -440,7 +473,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
               : normalizedFaceStatus);
 
     allEmployees = safeUserDataSource
-        .map((json) => UserProfile.fromJson(json))
+        .map((json) => UserModel.fromJson(json))
         .toList();
 
     officeLocation = _resolveOfficeLocation();
@@ -507,437 +540,15 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     _syncScanStateFromAttendanceData();
   }
 
-  Future<void> _listenRealtimeData() async {
-    try {
-      await _refreshCurrentFaceBiometrics();
-
-      final users = await _realtimeDataController.fetchUserRecords();
-      _userRecordsData = users;
-
-      final office = await _realtimeDataController.fetchOfficeConnection(
-        officeId: currentUser.officeId,
-      );
-      if (office != null) {
-        _officeConfigData = office;
-      }
-
-      // Fetch and sync attendance records so scan state persists on reload
-      try {
-        final attendanceList = await _realtimeDataController
-            .fetchAttendanceRecords();
-        if (attendanceList.isNotEmpty) {
-          setAttendanceRecords(attendanceList);
-          debugPrint(
-            '[_listenRealtimeData] Synced ${attendanceList.length} attendance records',
-          );
-        }
-      } catch (e) {
-        debugPrint('[_listenRealtimeData] Error fetching attendance: $e');
-      }
-
-      debugPrint('[_listenRealtimeData] officeConfigData: $_officeConfigData');
-      debugPrint(
-        '[_listenRealtimeData] resolvedOffice: ${_resolveOfficeLocation()}',
-      );
-
-      if (mounted) {
-        setState(_loadData);
-      }
-
-      _subscribeOfficeConnection(currentUser.officeId);
-      _subscribeAttendanceNotifications();
-      _syncLeaveRecordSubscriptions(_userRecordsData);
-
-      _userRecordsSubscription = _realtimeDataController
-          .watchUserRecords()
-          .listen((records) {
-            if (!mounted) return;
-
-            _syncLeaveRecordSubscriptions(records);
-
-            // Fetch fresh attendance data when user records update
-            _realtimeDataController
-                .fetchAttendanceRecords()
-                .then((attendance) {
-                  if (attendance.isNotEmpty) {
-                    setAttendanceRecords(attendance);
-                  }
-                })
-                .catchError((e) {
-                  debugPrint('[watchUserRecords] Error syncing attendance: $e');
-                });
-
-            _refreshCurrentFaceBiometrics().whenComplete(() {
-              if (!mounted) return;
-              setState(() {
-                _userRecordsData = records;
-                _loadData();
-              });
-            });
-
-            _subscribeOfficeConnection(currentUser.officeId);
-          });
-    } catch (_) {
-      // Keep graceful fallback to local/default values if realtime fetch fails.
-    } finally {
-      if (mounted && isInitialDataLoading) {
-        setState(() {
-          isInitialDataLoading = false;
-        });
-      }
+  /// Loads all data from static/local sources only.
+  /// No realtime/Firebase connections are made here.
+  Future<void> _loadAllData() async {
+    await _loadData();
+    if (mounted) {
+      setState(() {
+        isInitialDataLoading = false;
+      });
     }
-  }
-
-  Future<void> _refreshCurrentFaceBiometrics() async {
-    final String userId = (loggedInUserId ?? '').toString().trim();
-    if (userId.isEmpty) {
-      _currentFaceBiometricsData = <String, dynamic>{};
-      return;
-    }
-
-    try {
-      final Map<String, dynamic>? faceData = await _realtimeDataController
-          .fetchUserFaceBiometrics(userId);
-      _currentFaceBiometricsData = faceData ?? <String, dynamic>{};
-    } catch (_) {
-      _currentFaceBiometricsData = <String, dynamic>{};
-    }
-  }
-
-  void _subscribeOfficeConnection(String officeId) {
-    final normalizedOfficeId = officeId.trim().isEmpty
-        ? 'hq_phnom_penh_01'
-        : officeId.trim();
-    if (_activeOfficeId == normalizedOfficeId) {
-      return;
-    }
-
-    _officeConfigSubscription?.cancel();
-    _activeOfficeId = normalizedOfficeId;
-    _officeConfigSubscription = _realtimeDataController
-        .watchOfficeConnection(officeId: normalizedOfficeId)
-        .listen((office) {
-          if (!mounted || office == null) return;
-
-          setState(() {
-            _officeConfigData = office;
-            _loadData();
-          });
-
-          debugPrint(
-            '[_subscribeOfficeConnection] officeConfigData: $_officeConfigData',
-          );
-          debugPrint(
-            '[_subscribeOfficeConnection] resolvedOffice: ${_resolveOfficeLocation()}',
-          );
-
-          setupOfficeMapObjects().whenComplete(() {
-            _resetNotificationStateForOffice();
-            _subscribeAttendanceNotifications();
-          });
-        });
-  }
-
-  void _resetNotificationStateForOffice() {
-    _attendanceWatcherPrimed = false;
-    _leaveStatusByKey.clear();
-    _attendanceCheckInByKey.clear();
-    _attendanceCheckOutByKey.clear();
-    _leaveRecordPrimedUsers.clear();
-    for (final subscription in _leaveRecordSubscriptions.values) {
-      subscription.cancel();
-    }
-    _leaveRecordSubscriptions.clear();
-  }
-
-  void _subscribeAttendanceNotifications() {
-    _attendanceNotificationSubscription?.cancel();
-    _attendanceNotificationSubscription = _realtimeDataController
-        .watchAttendanceRecords()
-        .listen((records) {
-          // Sync the global attendance records list so scan state persists
-          setAttendanceRecords(records);
-          _processAttendanceNotifications(records);
-        });
-  }
-
-  void _processAttendanceNotifications(List<Map<String, dynamic>> records) {
-    if (!_attendanceWatcherPrimed) {
-      for (final record in records) {
-        final String? key = _attendanceKey(record);
-        if (key == null || !_isSameOfficeUid(record['uid']?.toString())) {
-          continue;
-        }
-        _attendanceCheckInByKey[key] = (record['check_in'] ?? '--:--')
-            .toString()
-            .trim();
-        _attendanceCheckOutByKey[key] = (record['check_out'] ?? '--:--')
-            .toString()
-            .trim();
-      }
-      _attendanceWatcherPrimed = true;
-      return;
-    }
-
-    for (final record in records) {
-      final String? key = _attendanceKey(record);
-      if (key == null || !_isSameOfficeUid(record['uid']?.toString())) {
-        continue;
-      }
-
-      final String uid = (record['uid'] ?? '').toString().trim();
-      final String name = _displayNameByUid(uid);
-      final String checkIn = (record['check_in'] ?? '--:--').toString().trim();
-      final String checkOut = (record['check_out'] ?? '--:--')
-          .toString()
-          .trim();
-
-      final String previousIn = _attendanceCheckInByKey[key] ?? '--:--';
-      final String previousOut = _attendanceCheckOutByKey[key] ?? '--:--';
-
-      if (_isAttendanceTimeSet(checkIn) && !_isAttendanceTimeSet(previousIn)) {
-        _notifyOfficeEvent(
-          title: 'Attendance Check-In',
-          body: '$name checked in at $checkIn',
-          payload: 'attendance_check_in:$uid',
-        );
-      }
-
-      if (_isAttendanceTimeSet(checkOut) &&
-          !_isAttendanceTimeSet(previousOut)) {
-        _notifyOfficeEvent(
-          title: 'Attendance Check-Out',
-          body: '$name checked out at $checkOut',
-          payload: 'attendance_check_out:$uid',
-        );
-      }
-
-      _attendanceCheckInByKey[key] = checkIn;
-      _attendanceCheckOutByKey[key] = checkOut;
-    }
-  }
-
-  void _syncLeaveRecordSubscriptions(List<Map<String, dynamic>> records) {
-    final Set<String> targetUids = records
-        .map((record) => (record['uid'] ?? '').toString().trim())
-        .where((uid) => uid.isNotEmpty && _isSameOfficeUid(uid))
-        .toSet();
-
-    final List<String> staleUids = _leaveRecordSubscriptions.keys
-        .where((uid) => !targetUids.contains(uid))
-        .toList();
-
-    for (final uid in staleUids) {
-      _leaveRecordSubscriptions.remove(uid)?.cancel();
-      _leaveRecordPrimedUsers.remove(uid);
-      _leaveStatusByKey.removeWhere((key, _) => key.startsWith('$uid|'));
-    }
-
-    for (final uid in targetUids) {
-      _leaveRecordSubscriptions.putIfAbsent(
-        uid,
-        () =>
-            _realtimeDataController.watchUserLeaveRecords(uid).listen((items) {
-              _processLeaveStatusNotificationsForUser(uid, items);
-            }),
-      );
-    }
-  }
-
-  void _processLeaveStatusNotificationsForUser(
-    String uid,
-    List<Map<String, dynamic>> leaveRecords,
-  ) {
-    if (!_isSameOfficeUid(uid)) {
-      return;
-    }
-
-    if (!_leaveRecordPrimedUsers.contains(uid)) {
-      for (final leave in leaveRecords) {
-        final String requestId = (leave['request_id'] ?? '').toString().trim();
-        if (requestId.isEmpty) continue;
-        final String status = (leave['status'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        _leaveStatusByKey['$uid|$requestId'] = status;
-      }
-      _leaveRecordPrimedUsers.add(uid);
-      return;
-    }
-
-    final String name = _displayNameByUid(uid);
-    final Set<String> seenKeys = <String>{};
-
-    for (final leave in leaveRecords) {
-      final String requestId = (leave['request_id'] ?? '').toString().trim();
-      if (requestId.isEmpty) continue;
-
-      final String compositeKey = '$uid|$requestId';
-      seenKeys.add(compositeKey);
-
-      final String status = (leave['status'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final String previousStatus = _leaveStatusByKey[compositeKey] ?? '';
-      final String type = (leave['type'] ?? 'leave').toString().replaceAll(
-        '_',
-        ' ',
-      );
-
-      if (status != previousStatus &&
-          (status == 'approved' || status == 'rejected')) {
-        _notifyOfficeEvent(
-          title: status == 'approved' ? 'Leave Approved' : 'Leave Rejected',
-          body: '$name\'s $type request was $status.',
-          payload: 'leave_$status:$uid:$requestId',
-        );
-      }
-
-      _leaveStatusByKey[compositeKey] = status;
-    }
-
-    _leaveStatusByKey.removeWhere(
-      (key, _) => key.startsWith('$uid|') && !seenKeys.contains(key),
-    );
-  }
-
-  Future<void> _notifyOfficeEvent({
-    required String title,
-    required String body,
-    required String payload,
-  }) async {
-    final String userId = (loggedInUserId ?? '').toString().trim();
-    if (userId.isEmpty) {
-      return;
-    }
-
-    final bool notificationsEnabled = await _realtimeDataController
-        .isUserNotificationEnabled(userId);
-    if (!notificationsEnabled) {
-      return;
-    }
-
-    await _realtimeDataController.upsertUserNotification(userId, {
-      'title': title,
-      'message': body,
-      'type': _notificationTypeFromPayload(payload),
-      'isRead': false,
-      'timestamp': DateTime.now(),
-    });
-
-    await LocalNotificationService.instance.show(
-      title: title,
-      body: body,
-      payload: payload,
-    );
-  }
-
-  String _notificationTypeFromPayload(String payload) {
-    final String normalized = payload.trim().toLowerCase();
-    if (normalized.startsWith('attendance_')) {
-      return 'attendance';
-    }
-    if (normalized.startsWith('leave_')) {
-      return 'leave';
-    }
-    return 'general';
-  }
-
-  bool _isNotificationEnabled() {
-    final String userId = (loggedInUserId ?? '').toString().trim();
-    if (userId.isEmpty) {
-      return true;
-    }
-
-    final Map<String, dynamic>? record = _userRecordsData
-        .cast<Map<String, dynamic>?>()
-        .firstWhere(
-          (item) => (item?['uid'] ?? '').toString().trim() == userId,
-          orElse: () => null,
-        );
-
-    final dynamic appSettings =
-        record?['app_settings'] ?? record?['app_setting'];
-    if (appSettings is Map) {
-      return _parseBool(
-            appSettings['notifications_enabled'] ??
-                appSettings['notification_enable'] ??
-                appSettings['notification_enabled'],
-          ) ??
-          true;
-    }
-
-    return currentUser.appSettings.notificationsEnabled;
-  }
-
-  bool? _parseBool(dynamic value) {
-    if (value is bool) {
-      return value;
-    }
-
-    final String normalized = (value ?? '').toString().trim().toLowerCase();
-    if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
-      return true;
-    }
-    if (normalized == 'false' || normalized == '0' || normalized == 'no') {
-      return false;
-    }
-    return null;
-  }
-
-  bool _isSameOfficeUid(String? uid) {
-    final String resolvedUid = (uid ?? '').trim();
-    if (resolvedUid.isEmpty) {
-      return false;
-    }
-
-    final String currentOffice = currentUser.officeId.trim();
-    final Map<String, dynamic>? userRecord = _userRecordsData
-        .cast<Map<String, dynamic>?>()
-        .firstWhere(
-          (item) => (item?['uid'] ?? '').toString().trim() == resolvedUid,
-          orElse: () => null,
-        );
-
-    final String userOffice = (userRecord?['office_id'] ?? '')
-        .toString()
-        .trim();
-    if (currentOffice.isEmpty) {
-      return true;
-    }
-
-    return userOffice.isNotEmpty && userOffice == currentOffice;
-  }
-
-  String _displayNameByUid(String uid) {
-    final Map<String, dynamic>? record = _userRecordsData
-        .cast<Map<String, dynamic>?>()
-        .firstWhere(
-          (item) => (item?['uid'] ?? '').toString().trim() == uid.trim(),
-          orElse: () => null,
-        );
-
-    final String display = (record?['display_name'] ?? '').toString().trim();
-    return display.isEmpty ? uid : display;
-  }
-
-  String? _attendanceKey(Map<String, dynamic> record) {
-    final String uid = (record['uid'] ?? '').toString().trim();
-    final String date = (record['date'] ?? '').toString().trim();
-    if (uid.isEmpty || date.isEmpty) {
-      return null;
-    }
-    return '$uid|$date';
-  }
-
-  bool _isAttendanceTimeSet(String value) {
-    final String normalized = value.trim();
-    if (normalized.isEmpty) {
-      return false;
-    }
-    return normalized != '--:--' && normalized != '--:-- --';
   }
 
   void _syncScanStateFromAttendanceData() {
@@ -976,7 +587,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
 
   // --- Getters for UI Consumption ---
 
-  String _getDisplayLastName(String? fullName) {
+  String _getDisplayFirstName(String? fullName) {
     if (fullName == null) return '';
     final parts = fullName
         .trim()
@@ -984,11 +595,10 @@ abstract class HomePageLogic extends State<HomePageScreen> {
         .where((part) => part.isNotEmpty)
         .toList();
     if (parts.isEmpty) return '';
-    return parts.last;
+    return parts.first;
   }
 
-  String get currentUserDisplayName =>
-      _getDisplayLastName(currentUser.displayName);
+  String get currentUserDisplayName => currentUser.name;
 
   List<Map<String, dynamic>> get employeeListDisplayData {
     final sortedEmployees = List<UserProfile>.from(allEmployees)
@@ -1003,7 +613,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
       final rank = index + 1;
 
       return {
-        "name": _getDisplayLastName(user.displayName),
+        "name": _getDisplayFirstName(user.displayName),
         "role": user.roleTitle,
         "score":
             "${user.achievements.performanceScore} ${AppStrings.tr('points_label')}",
@@ -1025,9 +635,10 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     final int sickLimit = (policy['sick_leave_limit'] as num?)?.toInt() ?? 0;
 
     int calculateTaken(String type) {
-      return currentUser.leaveRecords
-          .where((record) => record.type == type && record.status == 'approved')
-          .fold(0, (sum, record) => sum + record.durationInDays);
+      return 0;
+      // return currentUser.leaveRecords
+      //     .where((record) => record.type == type && record.status == 'approved')
+      //     .fold(0, (sum, record) => sum + record.durationInDays);
     }
 
     final int annualTaken = calculateTaken('annual_leave');
@@ -1071,7 +682,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     try {
       final todayRecord = attendanceRecords.firstWhere(
         (record) =>
-            record['uid'] == currentUser.uid && record['date'] == todayStr,
+            record['uid'] == currentUser.id && record['date'] == todayStr,
       );
 
       final Map<String, dynamic> attendance = {
@@ -1427,8 +1038,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
       return;
     }
 
-    _tryAutoSaveAbsentWhenDeadlineReached();
-
     if (_deadlineRefreshTimer != null) {
       return;
     }
@@ -1439,59 +1048,12 @@ abstract class HomePageLogic extends State<HomePageScreen> {
         return;
       }
 
-      _tryAutoSaveAbsentWhenDeadlineReached();
-
       setState(() {
         if (isAttendanceScanBlockedByDeadline) {
           _stopDeadlineRefreshWatcher();
         }
       });
     });
-  }
-
-  Future<void> _tryAutoSaveAbsentWhenDeadlineReached() async {
-    if (!mounted ||
-        !isAttendanceScanBlockedByDeadline ||
-        isTodayOfficeHoliday) {
-      return;
-    }
-
-    // Only auto-mark absent when user has not scanned in/out at all.
-    if (_isTypeCompleted('check_in') || _isTypeCompleted('check_out')) {
-      return;
-    }
-
-    final String userId = (loggedInUserId ?? '').toString().trim();
-    if (userId.isEmpty || _isAutoAbsentSaveInProgress) {
-      return;
-    }
-
-    final String todayKey = (currentAttendance['date'] ?? '').toString().trim();
-    if (todayKey.isEmpty) {
-      return;
-    }
-
-    final String saveKey = '$userId|$todayKey';
-    if (_lastAutoAbsentSaveKey == saveKey) {
-      return;
-    }
-
-    _isAutoAbsentSaveInProgress = true;
-    try {
-      final Map<String, dynamic> savedRecord = await _realtimeDataController
-          .saveAbsentAttendanceIfNotScanned(uid: userId);
-
-      if (!mounted) {
-        return;
-      }
-
-      applyDatabaseAttendanceScan(savedRecord);
-      _lastAutoAbsentSaveKey = saveKey;
-    } catch (e) {
-      debugPrint('[_tryAutoSaveAbsentWhenDeadlineReached] Error: $e');
-    } finally {
-      _isAutoAbsentSaveInProgress = false;
-    }
   }
 
   void _stopDeadlineRefreshWatcher() {
@@ -1659,14 +1221,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   void dispose() {
     _checkOutCooldownTimer?.cancel();
     _deadlineRefreshTimer?.cancel();
-    _userRecordsSubscription?.cancel();
-    _officeConfigSubscription?.cancel();
-    _attendanceNotificationSubscription?.cancel();
-    for (final subscription in _leaveRecordSubscriptions.values) {
-      subscription.cancel();
-    }
-    _leaveRecordSubscriptions.clear();
-    _leaveRecordPrimedUsers.clear();
     positionStreamSubscription?.cancel();
     mapController?.dispose();
     super.dispose();
@@ -2072,7 +1626,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     final Map<String, dynamic> normalizedRecord = Map<String, dynamic>.from(
       savedRecord,
     );
-    final String uid = (normalizedRecord['uid'] ?? currentUser.uid)
+    final String uid = (normalizedRecord['uid'] ?? currentUser.id)
         .toString()
         .trim();
     final String dateKey =

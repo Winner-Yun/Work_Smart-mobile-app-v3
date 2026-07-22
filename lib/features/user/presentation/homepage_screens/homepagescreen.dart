@@ -4,7 +4,6 @@ import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/logic/homepage_logic.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/app_profile_avatar.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/home_page_skeleton_loading.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -608,8 +607,9 @@ class _HomePageScreenState extends HomePageLogic {
   }
 
   Widget _buildStickyHeader(BuildContext context) {
+    final theme = Theme.of(context);
     return SliverAppBar(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
       pinned: true,
       automaticallyImplyLeading: false,
       scrolledUnderElevation: 0,
@@ -620,29 +620,33 @@ class _HomePageScreenState extends HomePageLogic {
         children: [
           GestureDetector(
             onTap: widget.onProfileTap,
-            child: Stack(
-              children: [
-                AppProfileAvatar(
-                  displayName: currentUserDisplayName,
-                  imageUrl: currentUser.profileUrl,
-                  radius: 20,
-                  backgroundColor: Theme.of(context).cardTheme.color,
-                  textColor: Theme.of(context).colorScheme.onSurface,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  width: 2,
                 ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      border: Border.all(color: Colors.white, width: 2),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
+              ),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
+                backgroundImage: currentUser.avatar.isNotEmpty
+                    ? NetworkImage(currentUser.avatar)
+                    : null,
+                child: (currentUser.avatar.isEmpty)
+                    ? Text(
+                        currentUserDisplayName.isNotEmpty
+                            ? currentUserDisplayName[0].toUpperCase()
+                            : 'U',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      )
+                    : null,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -652,15 +656,15 @@ class _HomePageScreenState extends HomePageLogic {
               children: [
                 Text(
                   AppStrings.tr('greeting'),
-                  style: TextStyle(color: AppColors.textGrey, fontSize: 14),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
-                // Dynamic User Name
+                // Dynamic User Name (no Mr/Ms prefix)
                 Text(
-                  "${AppStrings.tr(currentUser.gender == 'male' ? 'greet_pronoun_man' : 'greet_pronoun_woman')} $currentUserDisplayName",
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontSize: 18,
+                  currentUserDisplayName,
+                  style: const TextStyle(
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
                   ),
                 ),
               ],
@@ -669,56 +673,48 @@ class _HomePageScreenState extends HomePageLogic {
         ],
       ),
       actions: [
-        IconButton(
-          onPressed: () => Navigator.pushNamed(
-            context,
-            AppRoute.notificationScreen,
-            arguments: widget.loginData,
+        if (widget.onSwitchWorkspace != null)
+          IconButton(
+            tooltip: AppStrings.tr('switch_workspace'),
+            onPressed: widget.onSwitchWorkspace,
+            icon: const Icon(Icons.home_work_sharp),
           ),
-          icon: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: watchUserNotificationItems(),
-            builder: (context, snapshot) {
-              final List<Map<String, dynamic>> notifications =
-                  snapshot.data ?? const <Map<String, dynamic>>[];
-              final bool showDot = shouldShowNotificationDot(notifications);
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: watchUserNotificationItems(),
+          builder: (context, snapshot) {
+            final List<Map<String, dynamic>> notifications =
+                snapshot.data ?? const <Map<String, dynamic>>[];
+            final bool showDot = shouldShowNotificationDot(notifications);
 
-              return Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardTheme.color,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 5,
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    Icon(
-                      Icons.notifications_none,
-                      color: Theme.of(context).iconTheme.color,
-                    ),
-                    if (showDot)
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    AppRoute.notificationScreen,
+                    arguments: widget.loginData,
+                  ),
+                  icon: const Icon(Icons.notifications_none_rounded),
+                ).animate().shake(delay: 1.seconds, duration: 500.ms),
+                if (showDot)
+                  Positioned(
+                    top: 14,
+                    right: 14,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        shape: BoxShape.circle,
                       ),
-                  ],
-                ),
-              );
-            },
-          ).animate().shake(delay: 1.seconds, duration: 500.ms),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
+        const SizedBox(width: 8),
       ],
     );
   }
