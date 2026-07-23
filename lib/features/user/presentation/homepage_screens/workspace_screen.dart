@@ -147,6 +147,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       return AppBar(
         elevation: 0,
         toolbarHeight: 80,
+        scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
         title: Row(
@@ -175,6 +176,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     return AppBar(
       elevation: 0,
       toolbarHeight: 80,
+      scrolledUnderElevation: 0,
       backgroundColor: Colors.transparent,
       automaticallyImplyLeading: false,
       title: Row(

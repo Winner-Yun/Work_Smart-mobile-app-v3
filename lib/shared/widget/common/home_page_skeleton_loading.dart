@@ -106,11 +106,19 @@ class _HomePageSkeletonLoadingState extends State<HomePageSkeletonLoading>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _SkeletonBox(
+                          width: double.infinity,
+                          height: 120,
+                          color: animatedColor,
+                          opacity: pulse,
+                          radius: 20,
+                        ),
                         const SizedBox(height: 10),
                         _SkeletonDateAndStatusRow(
                           shimmerColor: animatedColor,
                           pulse: pulse,
                         ),
+
                         const SizedBox(height: 20),
                         _SkeletonTimeRow(
                           color: baseColor,

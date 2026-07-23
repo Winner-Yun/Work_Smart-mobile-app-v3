@@ -9,6 +9,10 @@ class ApiEndpoints {
 
   // workspace
   static const String myWorkspaces = '/workspace/me';
+  static String workspaceGeofence(String workspaceId) =>
+      '/workspace/$workspaceId/geofence';
+  static String workspacePolicy(String workspaceId) =>
+      '/workspace/$workspaceId/policy';
 
   // INVITE
   static const String myInvites = '/invite/me';

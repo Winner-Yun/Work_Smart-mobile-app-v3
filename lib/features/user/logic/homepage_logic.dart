@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:detect_fake_location/detect_fake_location.dart';
@@ -15,14 +16,25 @@ import 'package:flutter_worksmart_app/core/util/database/office_data.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
 import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/geofence_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/workspace_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/geofence_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/workspace_screen.dart';
+import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
+import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 enum _PermissionResolutionAction { retry, settings, notNow }
@@ -33,6 +45,24 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   final RealtimeDataController _realtimeDataController =
       RealtimeDataController();
 
+  // --- Repositories & Services ---
+  late final GeofenceRepository _geofenceRepo;
+  late final PolicyRepository _policyRepo;
+  late final WorkspaceRepository _workspaceRepo;
+
+  Workspace? currentWorkspace;
+  GeofenceModel? currentGeofence;
+  PolicyModel? currentPolicy;
+  bool isRefreshing = false;
+
+  String get workspaceName => currentWorkspace?.workspaceName.isNotEmpty == true
+      ? currentWorkspace!.workspaceName
+      : officeName;
+  String get workspaceDescription =>
+      currentWorkspace?.description.isNotEmpty == true
+      ? currentWorkspace!.description
+      : 'Active Workspace Zone';
+  int get workspaceMemberCount => currentWorkspace?.memberCount ?? 1;
   // --- Data Models ---
   late UserModel currentUser;
   late List<UserModel> allEmployees;
@@ -53,7 +83,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   late String currentFaceStatus;
 
   // --- Office Configuration  ---
-
   late LatLng officeLocation;
   late double scanRangeMeters;
   late String officeName;
@@ -117,8 +146,10 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   @override
   void initState() {
     super.initState();
+    _geofenceRepo = GeofenceRepository(GeofenceService());
+    _policyRepo = PolicyRepository(PolicyService());
+    _workspaceRepo = WorkspaceRepository(WorkspaceService());
     loggedInUserId = widget.loginData?['uid'];
-    _fetchAndSaveUserProfile();
     _loadAllData();
     setupOfficeMapObjects();
     generateProfileMarker();
@@ -135,11 +166,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
 
     _startupFlowStarted = true;
     await LocalNotificationService.instance.initialize();
-
-    // await _detectDeveloperModeOnHomepage();
-    // if (!mounted || _developerModeWarningShown) {
-    //   return;
-    // }
 
     final bool locationGranted = await _handleLocationPermissionStep();
     await _handleNotificationPermissionStep();
@@ -395,9 +421,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     return action ?? _PermissionResolutionAction.notNow;
   }
 
-  /// Loads the cached user profile from the local database.
-  /// This is used as a fallback when the static data doesn't contain
-  /// the user's profile information (name, gender, etc.).
   Future<Map<String, dynamic>?> _loadCachedUserProfile() async {
     try {
       return await DatabaseHelper().getUserProfile();
@@ -407,9 +430,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     }
   }
 
-  /// Fetches the user profile from the /auth/me API endpoint and saves
-  /// it to the local database so it can be used on subsequent app starts
-  /// without requiring a network connection.
   Future<void> _fetchAndSaveUserProfile() async {
     try {
       final userRepository = UserRepository(UserService());
@@ -436,10 +456,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
       orElse: () => safeUserDataSource.first,
     );
 
-    // If the user data from static sources doesn't have a proper name or
-    // gender, try loading the cached profile from the local database.
-    // This ensures the homepage displays the correct profile name and gender
-    // (Mr/Ms) that were saved by the workspace screen.
     final String staticUserName =
         (currentUserData['display_name'] ?? currentUserData['name'])
             ?.toString() ??
@@ -477,9 +493,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
         .toList();
 
     officeLocation = _resolveOfficeLocation();
-    debugPrint('[_loadData] officeConfigData: $_officeConfigData');
-    debugPrint('[_loadData] resolvedOffice: $officeLocation');
-    debugPrint('Office Lat: ${officeLocation.latitude}');
+
     final geofence =
         (_officeConfigData['geofence'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
@@ -490,7 +504,15 @@ abstract class HomePageLogic extends State<HomePageScreen> {
           geofence['radius'],
       fallback: 50,
     );
-    officeName = _officeConfigData['office_name'].toString();
+    if (currentWorkspace != null &&
+        currentWorkspace!.workspaceName.isNotEmpty) {
+      officeName = currentWorkspace!.workspaceName;
+    } else if (currentGeofence != null && currentGeofence!.name.isNotEmpty) {
+      officeName = currentGeofence!.name;
+    } else {
+      officeName =
+          _officeConfigData['office_name']?.toString() ?? 'Main Office';
+    }
 
     final Map<String, dynamic> policy = _asStringKeyMap(
       _officeConfigData['policy'],
@@ -540,15 +562,201 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     _syncScanStateFromAttendanceData();
   }
 
-  /// Loads all data from static/local sources only.
-  /// No realtime/Firebase connections are made here.
-  Future<void> _loadAllData() async {
+  Future<void> _loadLocalWorkspaceAndConfig() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selectedId = prefs.getString('selected_workspace_id');
+
+      final cachedWorkspaceJson = prefs.getString('cached_selected_workspace');
+      bool hasMatchingCache = false;
+
+      // 1. Check if the cached active workspace matches the newly selected ID
+      if (cachedWorkspaceJson != null) {
+        final cachedWs = Workspace.fromJson(jsonDecode(cachedWorkspaceJson));
+        if (selectedId == null || cachedWs.id == selectedId) {
+          currentWorkspace = cachedWs;
+          hasMatchingCache = true;
+        }
+      }
+
+      // 2. If it doesn't match (user switched), pull the new name instantly from the workspaces list
+      if (!hasMatchingCache && selectedId != null) {
+        final cachedWorkspacesJson = prefs.getString('cached_workspaces');
+        if (cachedWorkspacesJson != null) {
+          final List<dynamic> decoded = jsonDecode(cachedWorkspacesJson);
+          for (final item in decoded) {
+            if (item is Map<String, dynamic> &&
+                item['id']?.toString() == selectedId) {
+              currentWorkspace = Workspace.fromJson(item);
+              // Update the active cache instantly so it doesn't lag
+              await prefs.setString(
+                'cached_selected_workspace',
+                jsonEncode(item),
+              );
+              break;
+            }
+          }
+        }
+      }
+
+      final cachedGeofenceJson = prefs.getString('cached_homepage_geofence');
+      if (cachedGeofenceJson != null) {
+        final Map<String, dynamic> geofenceMap = jsonDecode(cachedGeofenceJson);
+        currentGeofence = GeofenceModel.fromJson(geofenceMap);
+        _officeConfigData['geofence'] = geofenceMap;
+      }
+
+      final cachedPolicyJson = prefs.getString('cached_homepage_policy');
+      if (cachedPolicyJson != null) {
+        final Map<String, dynamic> policyMap = jsonDecode(cachedPolicyJson);
+        currentPolicy = PolicyModel.fromJson(policyMap);
+        _officeConfigData['policy'] = policyMap;
+      }
+    } catch (e) {
+      debugPrint('[_loadLocalWorkspaceAndConfig] Error: $e');
+    }
+  }
+
+  Future<void> _fetchWorkspaceGeofenceAndPolicy({
+    bool showRefreshing = false,
+  }) async {
+    if (showRefreshing && mounted) {
+      setState(() {
+        isRefreshing = true;
+      });
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selectedWorkspaceId = prefs.getString('selected_workspace_id');
+
+      if (selectedWorkspaceId != null && selectedWorkspaceId.isNotEmpty) {
+        final results = await Future.wait([
+          _workspaceRepo.getWorkspaces().catchError((_) => <Workspace>[]),
+          _geofenceRepo
+              .getGeofence(selectedWorkspaceId)
+              .then((g) => g as dynamic)
+              .catchError((_) => null),
+          _policyRepo
+              .getPolicy(selectedWorkspaceId)
+              .then((p) => p as dynamic)
+              .catchError((_) => null),
+        ]);
+
+        final List<Workspace> fetchedWorkspaces = results[0] as List<Workspace>;
+        final GeofenceModel? fetchedGeofence = results[1] as GeofenceModel?;
+        final PolicyModel? fetchedPolicy = results[2] as PolicyModel?;
+
+        if (fetchedWorkspaces.isNotEmpty) {
+          final matching = fetchedWorkspaces.firstWhere(
+            (w) => w.id == selectedWorkspaceId,
+            orElse: () => fetchedWorkspaces.first,
+          );
+          currentWorkspace = matching;
+          await prefs.setString(
+            'cached_selected_workspace',
+            jsonEncode(matching.toJson()),
+          );
+          final workspacesJson = jsonEncode(
+            fetchedWorkspaces.map((w) => w.toJson()).toList(),
+          );
+          await prefs.setString('cached_workspaces', workspacesJson);
+        }
+
+        if (fetchedGeofence != null) {
+          currentGeofence = fetchedGeofence;
+          final geofenceMap = {
+            'id': fetchedGeofence.id,
+            'workspace_id': fetchedGeofence.workspaceId,
+            'name': fetchedGeofence.name,
+            'latitude': fetchedGeofence.latitude,
+            'longitude': fetchedGeofence.longitude,
+            'radius_meters': fetchedGeofence.radiusMeters,
+            'status': fetchedGeofence.status,
+            'center': {
+              'lat': fetchedGeofence.latitude,
+              'lng': fetchedGeofence.longitude,
+            },
+          };
+          _officeConfigData['geofence'] = geofenceMap;
+          await prefs.setString(
+            'cached_homepage_geofence',
+            jsonEncode(geofenceMap),
+          );
+        }
+
+        if (fetchedPolicy != null) {
+          currentPolicy = fetchedPolicy;
+          final policyMap = {
+            'id': fetchedPolicy.id,
+            'workspace_id': fetchedPolicy.workspaceId,
+            'name': fetchedPolicy.name,
+            'work_start_time': fetchedPolicy.workStartTime,
+            'work_end_time': fetchedPolicy.workEndTime,
+            'check_in_start': fetchedPolicy.checkInStart,
+            'check_out_start': fetchedPolicy.checkOutStart,
+            'late_buffer_minutes': fetchedPolicy.lateBufferMinutes,
+            'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
+            'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
+            'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+            'status': fetchedPolicy.status,
+          };
+          _officeConfigData['policy'] = policyMap;
+          await prefs.setString(
+            'cached_homepage_policy',
+            jsonEncode(policyMap),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[_fetchWorkspaceGeofenceAndPolicy] Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRefreshing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> onRefresh() async {
+    // Show skeleton loader on manual refresh / workspace reload
+    if (mounted) {
+      setState(() {
+        isRefreshing = true;
+      });
+    }
+
+    await _fetchAndSaveUserProfile();
+    await _fetchWorkspaceGeofenceAndPolicy(showRefreshing: true);
     await _loadData();
+    await setupOfficeMapObjects();
+
+    if (mounted) {
+      setState(() {
+        isRefreshing = false;
+      });
+    }
+  }
+
+  Future<void> _loadAllData() async {
+    await _fetchAndSaveUserProfile();
+
+    await _loadLocalWorkspaceAndConfig();
+    await _loadData();
+
     if (mounted) {
       setState(() {
         isInitialDataLoading = false;
       });
     }
+
+    _fetchWorkspaceGeofenceAndPolicy().then((_) async {
+      if (mounted) {
+        await _loadData();
+        await setupOfficeMapObjects();
+      }
+    });
   }
 
   void _syncScanStateFromAttendanceData() {
@@ -586,7 +794,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   }
 
   // --- Getters for UI Consumption ---
-
   String _getDisplayFirstName(String? fullName) {
     if (fullName == null) return '';
     final parts = fullName
@@ -623,8 +830,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     });
   }
 
-  // Map Policy limits to UI cards with progress bar for used leaves
-
   List<Map<String, dynamic>> get leaveStatisticsData {
     final policy =
         (_officeConfigData['policy'] as Map<String, dynamic>?) ??
@@ -635,10 +840,7 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     final int sickLimit = (policy['sick_leave_limit'] as num?)?.toInt() ?? 0;
 
     int calculateTaken(String type) {
-      return 0;
-      // return currentUser.leaveRecords
-      //     .where((record) => record.type == type && record.status == 'approved')
-      //     .fold(0, (sum, record) => sum + record.durationInDays);
+      return 0; // Integration point
     }
 
     final int annualTaken = calculateTaken('annual_leave');
@@ -673,7 +875,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
     ];
   }
 
-  // Get formatted attendance data for today
   Map<String, dynamic> get currentAttendance {
     final now = DateTime.now();
     final todayStr =
@@ -1257,11 +1458,9 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   }
 
   LatLng _resolveOfficeLocation() {
-    // These act as the final safety net if the internet or Firestore fails.
     const double fallbackLat = 11.555979932235482;
     const double fallbackLng = 104.91655648374156;
 
-    // 1. Prefer root-level `center` or root-level lat/lng keys
     final Map<String, dynamic> rootCenter = _asStringKeyMap(
       _officeConfigData['center'],
     );
@@ -1271,7 +1470,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
           _officeConfigData['location'],
     );
 
-    // 2. Fallback to the geofence.center if root doesn't provide it
     final Map<String, dynamic> geofence = _asStringKeyMap(
       _officeConfigData['geofence'],
     );
@@ -1346,7 +1544,6 @@ abstract class HomePageLogic extends State<HomePageScreen> {
   }
 
   Future<void> setupOfficeMapObjects() async {
-    // Ensure assets exist or handle error
     try {
       final BitmapDescriptor customIcon = await getBytesFromAsset(
         AppImg.pinIcon,
@@ -1673,5 +1870,272 @@ abstract class HomePageLogic extends State<HomePageScreen> {
         hasMockScanSuccess = false;
       });
     }
+  }
+}
+
+abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
+  late final WorkspaceRepository _workspaceRepo;
+  late final UserRepository _userRepo;
+  bool isConfirming = false;
+  bool isLoading = true;
+  bool isRefreshing = false;
+  String? errorMessage;
+
+  List<Workspace> workspaces = [];
+  UserModel? currentUser;
+  String? selectedWorkspaceId;
+
+  // --- Caching constants ---
+  static const String _cacheKeyWorkspaces = 'cached_workspaces';
+  static const String _cacheKeyUser = 'cached_workspace_user';
+  static const String _cacheKeyTimestamp = 'cached_workspace_data_timestamp';
+
+  static const Duration _cacheMaxAge = Duration(minutes: 10);
+
+  SharedPreferences? _prefs;
+
+  @override
+  void initState() {
+    super.initState();
+    _workspaceRepo = WorkspaceRepository(WorkspaceService());
+    _userRepo = UserRepository(UserService());
+    _initData();
+  }
+
+  bool get shouldForceRefresh => _isCacheExpired();
+
+  bool get hasLocalUser => currentUser != null;
+  bool get hasLocalWorkspaces => workspaces.isNotEmpty;
+
+  bool _isCacheExpired() {
+    final prefs = _prefs;
+    if (prefs == null) return true;
+    final cachedTimestamp = prefs.getInt(_cacheKeyTimestamp);
+    if (cachedTimestamp == null) return true;
+    final cachedAt = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+    return DateTime.now().difference(cachedAt) > _cacheMaxAge;
+  }
+
+  Future<void> _initData() async {
+    _prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    await _loadFromLocal();
+
+    if (!mounted) return;
+
+    final bool hasAnyLocalData = hasLocalUser || hasLocalWorkspaces;
+
+    if (hasAnyLocalData) {
+      setState(() {
+        isLoading = false;
+        errorMessage = null;
+      });
+      if (_isCacheExpired()) {
+        _fetchFromNetwork(showLoading: false);
+      }
+    } else {
+      await _fetchFromNetwork(showLoading: true);
+    }
+  }
+
+  Future<void> _loadFromLocal() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+
+    final cachedWorkspacesJson = prefs.getString(_cacheKeyWorkspaces);
+    if (cachedWorkspacesJson != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(cachedWorkspacesJson);
+        workspaces = decoded
+            .map((json) => Workspace.fromJson(json as Map<String, dynamic>))
+            .toList();
+      } catch (e) {
+        debugPrint(
+          '⛔ [WorkspaceScreenLogic] Error parsing cached workspaces: $e',
+        );
+      }
+    }
+
+    final cachedUserJson = prefs.getString(_cacheKeyUser);
+    if (cachedUserJson != null) {
+      try {
+        currentUser = UserModel.fromJson(jsonDecode(cachedUserJson));
+      } catch (e) {
+        debugPrint('⛔ [WorkspaceScreenLogic] Error parsing cached user: $e');
+      }
+    }
+
+    if (currentUser == null) {
+      try {
+        final dbProfile = await DatabaseHelper().getUserProfile();
+        if (dbProfile != null) {
+          currentUser = UserModel.fromJson(dbProfile);
+          await prefs.setString(
+            _cacheKeyUser,
+            jsonEncode(currentUser!.toJson()),
+          );
+        }
+      } catch (e) {
+        debugPrint(
+          '⛔ [WorkspaceScreenLogic] Error loading user profile from DB: $e',
+        );
+      }
+    }
+
+    if (currentUser == null) {
+      final localFromLogin = _tryParseUserFromLoginData();
+      if (localFromLogin != null) {
+        currentUser = localFromLogin;
+        try {
+          await prefs.setString(
+            _cacheKeyUser,
+            jsonEncode(currentUser!.toJson()),
+          );
+          await DatabaseHelper().saveUserProfile(currentUser!.toJson());
+        } catch (_) {}
+      }
+    }
+  }
+
+  UserModel? _tryParseUserFromLoginData() {
+    final data = widget.loginData;
+    if (data == null || data.isEmpty) return null;
+    try {
+      final Map<String, dynamic> candidate;
+      if (data.containsKey('user') && data['user'] is Map) {
+        candidate = Map<String, dynamic>.from(data['user'] as Map);
+      } else {
+        candidate = Map<String, dynamic>.from(data);
+      }
+      if (candidate['name'] == null &&
+          candidate['email'] == null &&
+          candidate['_id'] == null &&
+          candidate['id'] == null) {
+        return null;
+      }
+      return UserModel.fromJson(candidate);
+    } catch (e) {
+      debugPrint(
+        '⛔ [WorkspaceScreenLogic] Error parsing user from loginData: $e',
+      );
+      return null;
+    }
+  }
+
+  Future<void> _fetchFromNetwork({required bool showLoading}) async {
+    if (showLoading) {
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+          errorMessage = null;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          isRefreshing = true;
+        });
+      }
+    }
+
+    try {
+      final results = await Future.wait([
+        _workspaceRepo.getWorkspaces(),
+        _userRepo.getUserProfile(),
+      ]);
+
+      if (!mounted) return;
+
+      setState(() {
+        workspaces = results[0] as List<Workspace>;
+        currentUser = results[1] as UserModel;
+        isLoading = false;
+        isRefreshing = false;
+        errorMessage = null;
+      });
+
+      await _saveToCache();
+    } catch (e) {
+      debugPrint('⛔ [WorkspaceScreenLogic] Error loading data: $e');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          isRefreshing = false;
+          if (workspaces.isEmpty && currentUser == null) {
+            errorMessage = 'Failed to load data. Please try again.';
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _saveToCache() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+
+    try {
+      final workspacesJson = jsonEncode(
+        workspaces.map((w) => w.toJson()).toList(),
+      );
+      await prefs.setString(_cacheKeyWorkspaces, workspacesJson);
+
+      if (currentUser != null) {
+        final userJson = currentUser!.toJson();
+        await prefs.setString(_cacheKeyUser, jsonEncode(userJson));
+        try {
+          await DatabaseHelper().saveUserProfile(userJson);
+        } catch (e) {
+          debugPrint(
+            '⛔ [WorkspaceScreenLogic] Error saving user profile to DB: $e',
+          );
+        }
+      }
+
+      await prefs.setInt(
+        _cacheKeyTimestamp,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+    } catch (e) {
+      debugPrint('⛔ [WorkspaceScreenLogic] Error saving cache: $e');
+    }
+  }
+
+  void onWorkspaceSelected(String id) {
+    setState(() {
+      selectedWorkspaceId = id;
+    });
+  }
+
+  Future<void> onConfirmSelection() async {
+    if (selectedWorkspaceId == null) return;
+
+    // Trigger the skeleton loader on your Workspace Screen UI
+    setState(() {
+      isConfirming = true;
+    });
+
+    // Await the confirmation/navigation
+    widget.onWorkspaceConfirmed(selectedWorkspaceId!);
+
+    if (mounted) {
+      setState(() {
+        isConfirming = false;
+      });
+    }
+  }
+
+  Future<void> onRetry() async {
+    await _fetchFromNetwork(showLoading: true);
+  }
+
+  Future<void> onRefresh() async {
+    await _fetchFromNetwork(showLoading: false);
+  }
+
+  @override
+  void dispose() {
+    _prefs = null;
+    super.dispose();
   }
 }

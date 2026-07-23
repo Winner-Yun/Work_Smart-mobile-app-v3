@@ -26,10 +26,39 @@ class HomePageScreen extends StatefulWidget {
 }
 
 class _HomePageScreenState extends HomePageLogic {
+  late final ScrollController _scrollController;
+  bool _scrolledUp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !isRefreshing) {
+      _scrolledUp = true;
+      onRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (isInitialDataLoading) {
-      return const HomePageSkeletonLoading();
+    // Show Skeleton Loader unconditionally on initial load OR when refreshing/reloading.
+    if (isInitialDataLoading || isRefreshing) {
+      return const Scaffold(body: SafeArea(child: HomePageSkeletonLoading()));
     }
 
     final bool isFaceApproved = currentFaceStatus == 'approved';
@@ -37,45 +66,399 @@ class _HomePageScreenState extends HomePageLogic {
     return SafeArea(
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: CustomScrollView(
-          slivers: [
-            _buildStickyHeader(context),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
-                    _buildDateAndStatusRow().animate().fadeIn(duration: 400.ms),
-                    const SizedBox(height: 20),
-                    _buildTimeAttendanceSection(
-                      context,
-                    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
-                    const SizedBox(height: 20),
+        body: Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                _buildStickyHeader(context),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
+                        _buildWorkspaceInfoCard(
+                          context,
+                        ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.1),
+                        const SizedBox(height: 16),
+                        _buildDateAndStatusRow().animate().fadeIn(
+                          duration: 400.ms,
+                        ),
+                        const SizedBox(height: 20),
+                        _buildTimeAttendanceSection(
+                          context,
+                        ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+                        const SizedBox(height: 20),
 
-                    if (isFaceApproved)
-                      (shouldShowCheckOutDeadlineCard
-                              ? _buildScanDeadlineCard(context)
-                              : hasMockScanSuccess
-                              ? _buildScanSuccessCard(context)
-                              : _buildLiveMapCard(context))
-                          .animate()
-                          .fadeIn(delay: 400.ms)
-                          .scale(begin: const Offset(0.95, 0.95))
-                    else
-                      _buildFaceRegistrationCard(),
-                    const SizedBox(height: 20),
-                    _buildLeaveStatsSection(
-                      context,
-                    ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.2),
-                    const SizedBox(height: 20),
+                        if (isFaceApproved)
+                          (shouldShowCheckOutDeadlineCard
+                                  ? _buildScanDeadlineCard(context)
+                                  : hasMockScanSuccess
+                                  ? _buildScanSuccessCard(context)
+                                  : _buildLiveMapCard(context))
+                              .animate()
+                              .fadeIn(delay: 400.ms)
+                              .scale(begin: const Offset(0.95, 0.95))
+                        else
+                          _buildFaceRegistrationCard(),
+                        const SizedBox(height: 20),
+                        _buildLeaveStatsSection(
+                          context,
+                        ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.2),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            _buildPullToRefreshIndicator(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || isInitialDataLoading || isRefreshing) {
+          if (isRefreshing) {
+            return Positioned(
+              top: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color:
+                      Theme.of(context).cardTheme.color ??
+                      (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey.shade800
+                          : Colors.white),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Refreshing workspace & rules...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
                   ],
                 ),
               ),
+            );
+          }
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
+              ),
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWorkspaceInfoCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color:
+            theme.cardTheme.color ??
+            (isDark ? Colors.grey.shade900 : Colors.white),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: primaryColor.withValues(alpha: 0.25),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      primaryColor.withValues(alpha: 0.25),
+                      primaryColor.withValues(alpha: 0.10),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    workspaceName.isNotEmpty
+                        ? workspaceName[0].toUpperCase()
+                        : 'W',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: primaryColor,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            workspaceName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                size: 10,
+                                color: Colors.green,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'Active',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      workspaceDescription,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.group_outlined,
+                          size: 15,
+                          color: primaryColor,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '$workspaceMemberCount Members',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade700.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 15,
+                          color: Colors.amber.shade700,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${scanRangeMeters.toInt()}m Zone',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (widget.onSwitchWorkspace != null)
+                InkWell(
+                  onTap: widget.onSwitchWorkspace,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Switch',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.swap_horiz_rounded,
+                          size: 16,
+                          color: primaryColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -658,7 +1041,6 @@ class _HomePageScreenState extends HomePageLogic {
                   AppStrings.tr('greeting'),
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
-                // Dynamic User Name (no Mr/Ms prefix)
                 Text(
                   currentUserDisplayName,
                   style: const TextStyle(
@@ -889,7 +1271,6 @@ class _HomePageScreenState extends HomePageLogic {
   }
 
   Widget _buildLeaveStatsSection(BuildContext context) {
-    // Access data via Getter from Logic
     return Row(
       children: leaveStatisticsData.map((data) {
         return Expanded(
@@ -982,25 +1363,38 @@ class _HomePageScreenState extends HomePageLogic {
               ),
               const SizedBox(width: 4),
               Text(
-                AppStrings.tr('days'),
-                style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
+                'Days',
+                style: const TextStyle(color: AppColors.textGrey, fontSize: 12),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 4,
-              backgroundColor: color.withOpacity(0.1),
+              value: progress,
+              backgroundColor: color.withOpacity(0.15),
               valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 6,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            "${AppStrings.tr('used')} $used ${AppStrings.tr('days')}\n${AppStrings.tr('remaining')} $remaining ${AppStrings.tr('days')}",
-            style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$used Used',
+                style: const TextStyle(color: AppColors.textGrey, fontSize: 12),
+              ),
+              Text(
+                '$remaining Left',
+                style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
         ],
       ),
