@@ -1,0 +1,524 @@
+part of '../homepage_logic.dart';
+
+mixin _DataLoadingMixin
+    on
+        _HomePageLogicState,
+        _AttendanceScanMixin,
+        _MapLocationMixin,
+        _FaceEmbeddingMixin {
+  Future<Map<String, dynamic>?> _loadCachedUserProfile() async {
+    try {
+      return await DatabaseHelper().getUserProfile();
+    } catch (e) {
+      debugPrint('[_loadCachedUserProfile] Error loading from DB: $e');
+      return null;
+    }
+  }
+
+  Future<void> _fetchAndSaveUserProfile() async {
+    try {
+      final userRepository = UserRepository(UserService());
+      final UserModel userModel = await userRepository.getUserProfile();
+      final Map<String, dynamic> userJson = userModel.toJson();
+      await DatabaseHelper().saveUserProfile(userJson);
+      debugPrint('[_fetchAndSaveUserProfile] Saved user profile to local DB');
+    } catch (e) {
+      debugPrint('[_fetchAndSaveUserProfile] Error: $e');
+    }
+  }
+
+  Future<void> _loadData() async {
+    final userDataSource = _userRecordsData.isNotEmpty
+        ? _userRecordsData
+        : usersFinalData;
+
+    final safeUserDataSource = userDataSource.isNotEmpty
+        ? userDataSource
+        : <Map<String, dynamic>>[defaultUserRecord];
+
+    final currentUserData = safeUserDataSource.firstWhere(
+      (user) => user['uid'] == loggedInUserId,
+      orElse: () => safeUserDataSource.first,
+    );
+
+    final String staticUserName =
+        (currentUserData['display_name'] ?? currentUserData['name'])
+            ?.toString() ??
+        '';
+    Map<String, dynamic>? effectiveUserData = currentUserData;
+    if (staticUserName.trim().isEmpty) {
+      final cachedProfile = await _loadCachedUserProfile();
+      if (cachedProfile != null) {
+        effectiveUserData = cachedProfile;
+      }
+    }
+
+    currentUser = UserModel.fromJson(effectiveUserData);
+    final Map<String, dynamic> faceData = _currentFaceBiometricsData;
+    final normalizedFaceStatus = (faceData['face_status'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final int faceCount =
+        int.tryParse((faceData['face_count'] ?? 0).toString()) ?? 0;
+    final bool hasFaceVector =
+        (faceData['face_embedding_vector'] is List) ||
+        (faceData['face_embeddings'] is List) ||
+        (faceData['face_vectors'] is List);
+    final bool hasFaceSamples = faceCount > 0 || hasFaceVector;
+    currentFaceStatus = normalizedFaceStatus.isEmpty
+        ? 'uninitialized'
+        : (normalizedFaceStatus == 'pending' && hasFaceSamples
+              ? 'approved'
+              : normalizedFaceStatus);
+
+    allEmployees = safeUserDataSource
+        .map((json) => UserModel.fromJson(json))
+        .toList();
+
+    officeLocation = _resolveOfficeLocation();
+
+    final geofence =
+        (_officeConfigData['geofence'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+
+    scanRangeMeters = _toDouble(
+      geofence['radius_meters'] ??
+          geofence['radiusMeters'] ??
+          geofence['radius'],
+      fallback: 50,
+    );
+    if (currentWorkspace != null &&
+        currentWorkspace!.workspaceName.isNotEmpty) {
+      officeName = currentWorkspace!.workspaceName;
+    } else if (currentGeofence != null && currentGeofence!.name.isNotEmpty) {
+      officeName = currentGeofence!.name;
+    } else {
+      officeName =
+          _officeConfigData['office_name']?.toString() ?? 'Main Office';
+    }
+
+    final Map<String, dynamic> policy = _asStringKeyMap(
+      _officeConfigData['policy'],
+    );
+    officeCheckInTime = _readStringByKeys(policy, const [
+      'check_in_start',
+      'checkInStart',
+    ], fallback: '09:00 AM');
+    officeCheckOutTime = _readStringByKeys(policy, const [
+      'check_out_start',
+      'checkOutEnd',
+    ], fallback: '06:00 PM');
+
+    final dynamic rawAllowMinutes =
+        _readByKeys(policy, const [
+          'check_out_scan_allow_minutes',
+          'checkOutScanAllowMinutes',
+        ]) ??
+        _readByKeys(_officeConfigData, const [
+          'check_out_scan_allow_minutes',
+          'checkOutScanAllowMinutes',
+        ]);
+    checkOutScanAllowMinutes = _parsePositiveInt(rawAllowMinutes, fallback: 30);
+
+    final dynamic rawLateBufferMinutes =
+        _readByKeys(policy, const [
+          'late_buffer_minutes',
+          'lateBufferMinutes',
+        ]) ??
+        _readByKeys(_officeConfigData, const [
+          'late_buffer_minutes',
+          'lateBufferMinutes',
+        ]);
+    lateBufferMinutes = _parsePositiveInt(rawLateBufferMinutes, fallback: 15);
+
+    final dynamic rawDeadlineScanMinutes =
+        _readByKeys(policy, const [
+          'deadline_scan_minutes',
+          'deadlineScanMinutes',
+        ]) ??
+        _readByKeys(_officeConfigData, const [
+          'deadline_scan_minutes',
+          'deadlineScanMinutes',
+        ]);
+    deadlineScanMinutes = _parseNonNegativeInt(rawDeadlineScanMinutes);
+    await _loadFaceEmbeddingData();
+    _syncScanStateFromAttendanceData();
+  }
+
+  Future<void> _loadLocalWorkspaceAndConfig() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selectedId = prefs.getString('selected_workspace_id');
+
+      final cachedWorkspaceJson = prefs.getString('cached_selected_workspace');
+      bool hasMatchingCache = false;
+
+      //  Check if the cached active workspace matches the newly selected ID
+      if (cachedWorkspaceJson != null) {
+        final cachedWs = Workspace.fromJson(jsonDecode(cachedWorkspaceJson));
+        if (selectedId == null || cachedWs.id == selectedId) {
+          currentWorkspace = cachedWs;
+          hasMatchingCache = true;
+        }
+      }
+
+      //  If it doesn't match (user switched), pull the new name instantly from the workspaces list
+      if (!hasMatchingCache && selectedId != null) {
+        final cachedWorkspacesJson = prefs.getString('cached_workspaces');
+        if (cachedWorkspacesJson != null) {
+          final List<dynamic> decoded = jsonDecode(cachedWorkspacesJson);
+          for (final item in decoded) {
+            if (item is Map<String, dynamic> &&
+                item['id']?.toString() == selectedId) {
+              currentWorkspace = Workspace.fromJson(item);
+              // Update the active cache instantly so it doesn't lag
+              await prefs.setString(
+                'cached_selected_workspace',
+                jsonEncode(item),
+              );
+              break;
+            }
+          }
+        }
+      }
+
+      final cachedGeofenceJson = prefs.getString('cached_homepage_geofence');
+      if (cachedGeofenceJson != null) {
+        final Map<String, dynamic> geofenceMap = jsonDecode(cachedGeofenceJson);
+        currentGeofence = GeofenceModel.fromJson(geofenceMap);
+        _officeConfigData['geofence'] = geofenceMap;
+      }
+
+      final cachedPolicyJson = prefs.getString('cached_homepage_policy');
+      if (cachedPolicyJson != null) {
+        final Map<String, dynamic> policyMap = jsonDecode(cachedPolicyJson);
+        currentPolicy = PolicyModel.fromJson(policyMap);
+        _officeConfigData['policy'] = policyMap;
+      }
+    } catch (e) {
+      debugPrint('[_loadLocalWorkspaceAndConfig] Error: $e');
+    }
+  }
+
+  Future<void> _fetchWorkspaceGeofenceAndPolicy({
+    bool showRefreshing = false,
+  }) async {
+    if (showRefreshing && mounted) {
+      setState(() {
+        isRefreshing = true;
+      });
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selectedWorkspaceId = prefs.getString('selected_workspace_id');
+
+      if (selectedWorkspaceId != null && selectedWorkspaceId.isNotEmpty) {
+        final results = await Future.wait([
+          _workspaceRepo.getWorkspaces().catchError((_) => <Workspace>[]),
+          _geofenceRepo
+              .getGeofence(selectedWorkspaceId)
+              .then((g) => g as dynamic)
+              .catchError((_) => null),
+          _policyRepo
+              .getPolicy(selectedWorkspaceId)
+              .then((p) => p as dynamic)
+              .catchError((_) => null),
+        ]);
+
+        final List<Workspace> fetchedWorkspaces = results[0] as List<Workspace>;
+        final GeofenceModel? fetchedGeofence = results[1] as GeofenceModel?;
+        final PolicyModel? fetchedPolicy = results[2] as PolicyModel?;
+
+        if (fetchedWorkspaces.isNotEmpty) {
+          final matching = fetchedWorkspaces.firstWhere(
+            (w) => w.id == selectedWorkspaceId,
+            orElse: () => fetchedWorkspaces.first,
+          );
+          currentWorkspace = matching;
+          await prefs.setString(
+            'cached_selected_workspace',
+            jsonEncode(matching.toJson()),
+          );
+          final workspacesJson = jsonEncode(
+            fetchedWorkspaces.map((w) => w.toJson()).toList(),
+          );
+          await prefs.setString('cached_workspaces', workspacesJson);
+        }
+
+        if (fetchedGeofence != null) {
+          currentGeofence = fetchedGeofence;
+          final geofenceMap = {
+            'id': fetchedGeofence.id,
+            'workspace_id': fetchedGeofence.workspaceId,
+            'name': fetchedGeofence.name,
+            'latitude': fetchedGeofence.latitude,
+            'longitude': fetchedGeofence.longitude,
+            'radius_meters': fetchedGeofence.radiusMeters,
+            'status': fetchedGeofence.status,
+            'center': {
+              'lat': fetchedGeofence.latitude,
+              'lng': fetchedGeofence.longitude,
+            },
+          };
+          _officeConfigData['geofence'] = geofenceMap;
+          await prefs.setString(
+            'cached_homepage_geofence',
+            jsonEncode(geofenceMap),
+          );
+        }
+
+        if (fetchedPolicy != null) {
+          currentPolicy = fetchedPolicy;
+          final policyMap = {
+            'id': fetchedPolicy.id,
+            'workspace_id': fetchedPolicy.workspaceId,
+            'name': fetchedPolicy.name,
+            'work_start_time': fetchedPolicy.workStartTime,
+            'work_end_time': fetchedPolicy.workEndTime,
+            'check_in_start': fetchedPolicy.checkInStart,
+            'check_out_start': fetchedPolicy.checkOutStart,
+            'late_buffer_minutes': fetchedPolicy.lateBufferMinutes,
+            'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
+            'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
+            'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+            'status': fetchedPolicy.status,
+          };
+          _officeConfigData['policy'] = policyMap;
+          await prefs.setString(
+            'cached_homepage_policy',
+            jsonEncode(policyMap),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[_fetchWorkspaceGeofenceAndPolicy] Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRefreshing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> onRefresh() async {
+    // Show skeleton loader on manual refresh / workspace reload
+    if (mounted) {
+      setState(() {
+        isRefreshing = true;
+      });
+    }
+
+    await _fetchAndSaveUserProfile();
+    await _fetchWorkspaceGeofenceAndPolicy(showRefreshing: true);
+    await _loadData();
+    await setupOfficeMapObjects();
+
+    if (mounted) {
+      setState(() {
+        isRefreshing = false;
+      });
+    }
+  }
+
+  Future<void> _loadAllData() async {
+    await _fetchAndSaveUserProfile();
+
+    await _loadLocalWorkspaceAndConfig();
+    await _loadData();
+
+    if (mounted) {
+      setState(() {
+        isInitialDataLoading = false;
+      });
+    }
+
+    _fetchWorkspaceGeofenceAndPolicy().then((_) async {
+      if (mounted) {
+        await _loadData();
+        await setupOfficeMapObjects();
+      }
+    });
+  }
+
+  // --- Getters for UI Consumption ---
+  String _getDisplayFirstName(String? fullName) {
+    if (fullName == null) return '';
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '';
+    return parts.first;
+  }
+
+  String get currentUserDisplayName => currentUser.name;
+
+  List<Map<String, dynamic>> get employeeListDisplayData {
+    final sortedEmployees = List<UserProfile>.from(allEmployees)
+      ..sort((a, b) {
+        final scoreA = a.achievements.performanceScore;
+        final scoreB = b.achievements.performanceScore;
+        return scoreB.compareTo(scoreA);
+      });
+
+    return List.generate(sortedEmployees.length, (index) {
+      final user = sortedEmployees[index];
+      final rank = index + 1;
+
+      return {
+        "name": _getDisplayFirstName(user.displayName),
+        "role": user.roleTitle,
+        "score":
+            "${user.achievements.performanceScore} ${AppStrings.tr('points_label')}",
+        "imgUrl": user.profileUrl,
+        "isTop": rank < 2,
+      };
+    });
+  }
+
+  List<Map<String, dynamic>> get leaveStatisticsData {
+    final policy =
+        (_officeConfigData['policy'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+
+    final int annualLimit =
+        (policy['annual_leave_limit'] as num?)?.toInt() ?? 0;
+    final int sickLimit = (policy['sick_leave_limit'] as num?)?.toInt() ?? 0;
+
+    int calculateTaken(String type) {
+      return 0; // Integration point
+    }
+
+    final int annualTaken = calculateTaken('annual_leave');
+    final int sickTaken = calculateTaken('sick_leave');
+
+    final annualProgress = annualLimit > 0
+        ? (annualTaken / annualLimit).clamp(0.0, 1.0)
+        : 0.0;
+    final sickProgress = sickLimit > 0
+        ? (sickTaken / sickLimit).clamp(0.0, 1.0)
+        : 0.0;
+
+    return [
+      {
+        "icon": Icons.beach_access,
+        "label": "annual_leave",
+        "amount": "$annualLimit",
+        "color": Colors.blue,
+        "progress": annualProgress,
+        "used": annualTaken,
+        "remaining": (annualLimit - annualTaken).clamp(0, annualLimit),
+      },
+      {
+        "icon": Icons.sick_outlined,
+        "label": "sick_leave",
+        "amount": "$sickLimit",
+        "color": Colors.purple,
+        "progress": sickProgress,
+        "used": sickTaken,
+        "remaining": (sickLimit - sickTaken).clamp(0, sickLimit),
+      },
+    ];
+  }
+
+  double _toDouble(dynamic value, {required double fallback}) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  Map<String, dynamic> _asStringKeyMap(dynamic value) {
+    if (value is! Map) return <String, dynamic>{};
+    return value.map((key, mapValue) => MapEntry(key.toString(), mapValue));
+  }
+
+  dynamic _readByKeys(Map<String, dynamic> source, List<String> keys) {
+    for (final key in keys) {
+      if (source.containsKey(key)) {
+        return source[key];
+      }
+    }
+    return null;
+  }
+
+  String _readStringByKeys(
+    Map<String, dynamic> source,
+    List<String> keys, {
+    required String fallback,
+  }) {
+    final dynamic raw = _readByKeys(source, keys);
+    final String parsed = raw?.toString().trim() ?? '';
+    return parsed.isNotEmpty ? parsed : fallback;
+  }
+
+  LatLng _resolveOfficeLocation() {
+    const double fallbackLat = 11.555979932235482;
+    const double fallbackLng = 104.91655648374156;
+
+    final Map<String, dynamic> rootCenter = _asStringKeyMap(
+      _officeConfigData['center'],
+    );
+    final Map<String, dynamic> rootLegacyLatLng = _asStringKeyMap(
+      _officeConfigData['lat_lng'] ??
+          _officeConfigData['latLng'] ??
+          _officeConfigData['location'],
+    );
+
+    final Map<String, dynamic> geofence = _asStringKeyMap(
+      _officeConfigData['geofence'],
+    );
+    final Map<String, dynamic> geofenceCenter = _asStringKeyMap(
+      geofence['center'],
+    );
+    final Map<String, dynamic> geofenceLegacyLatLng = _asStringKeyMap(
+      geofence['lat_lng'] ?? geofence['latLng'] ?? geofence['location'],
+    );
+
+    final double latitude = _toDouble(
+      _readByKeys(rootCenter, const ['lat', 'latitude']) ??
+          _readByKeys(rootLegacyLatLng, const ['lat', 'latitude']) ??
+          _readByKeys(geofenceCenter, const ['lat', 'latitude']) ??
+          _readByKeys(geofenceLegacyLatLng, const ['lat', 'latitude']) ??
+          _readByKeys(_officeConfigData, const [
+            'lat',
+            'latitude',
+            'office_latitude',
+          ]),
+      fallback: fallbackLat,
+    );
+
+    final double longitude = _toDouble(
+      _readByKeys(rootCenter, const ['lng', 'longitude']) ??
+          _readByKeys(rootLegacyLatLng, const ['lng', 'longitude']) ??
+          _readByKeys(geofenceCenter, const ['lng', 'longitude']) ??
+          _readByKeys(geofenceLegacyLatLng, const ['lng', 'longitude']) ??
+          _readByKeys(_officeConfigData, const [
+            'lng',
+            'longitude',
+            'office_longitude',
+          ]),
+      fallback: fallbackLng,
+    );
+
+    return LatLng(latitude, longitude);
+  }
+
+  int _parsePositiveInt(dynamic raw, {required int fallback}) {
+    final int parsed = raw is num
+        ? raw.toInt()
+        : int.tryParse(raw?.toString() ?? '') ?? fallback;
+    return parsed > 0 ? parsed : fallback;
+  }
+
+  int _parseNonNegativeInt(dynamic raw, {int fallback = 0}) {
+    final int parsed = raw is num
+        ? raw.toInt()
+        : int.tryParse(raw?.toString() ?? '') ?? fallback;
+    return parsed >= 0 ? parsed : fallback;
+  }
+}

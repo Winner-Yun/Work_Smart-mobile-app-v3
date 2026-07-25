@@ -1,0 +1,38 @@
+/// Attendance strings
+const Map<String, String> attendanceStringsEn = {
+  'my_stats': 'My Statistics',
+  'attendance_rate': 'Attendance Rate',
+  'present': 'Present',
+  'late': 'Late',
+  'absent': 'Absent',
+  'monthly_trend': 'Monthly Attendance Trends',
+  'all_shifts': 'All Shifts',
+  'monthly_attendance': 'Monthly Attendance',
+  'attendance_details': 'Attendance Details',
+  'check_in_title': 'Check-In',
+  'check_out_title': 'Check-Out',
+  'total_hours': 'Total Work Hours',
+  'on_time': 'On Time',
+  'date_label': 'Date',
+  'no_records': 'No records available',
+  'no_data_for_today': 'No data for today',
+};
+
+const Map<String, String> attendanceStringsKm = {
+  'my_stats': 'ស្ថិតិរបស់ខ្ញុំ',
+  'attendance_rate': 'អត្រាវត្តមាន',
+  'present': 'វត្តមាន',
+  'late': 'មកយឺត',
+  'absent': 'អវត្តមាន',
+  'monthly_trend': 'និន្នាការវត្តមានប្រចាំខែ',
+  'all_shifts': 'គ្រប់វេន',
+  'monthly_attendance': 'វត្តមានប្រចាំខែ',
+  'attendance_details': 'ព័ត៌មានលម្អិតនៃវត្តមាន',
+  'check_in_title': 'ការចុះវត្តមានចូល',
+  'check_out_title': 'ការចុះវត្តមានចេញ',
+  'total_hours': 'សរុបម៉ោងការងារ',
+  'on_time': 'ទាន់ពេល',
+  'date_label': 'កាលបរិច្ឆេទ',
+  'no_records': 'មិនមានកំណត់ត្រាណាមួយ',
+  'no_data_for_today': 'មិនមានទិន្នន័យសម្រាប់ថ្ងៃនេះទេ',
+};
