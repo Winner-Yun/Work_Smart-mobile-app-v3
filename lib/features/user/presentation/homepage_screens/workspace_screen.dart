@@ -148,7 +148,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         elevation: 0,
         toolbarHeight: 80,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: theme.scaffoldBackgroundColor,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
@@ -177,7 +177,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       elevation: 0,
       toolbarHeight: 80,
       scrolledUnderElevation: 0,
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.scaffoldBackgroundColor,
       automaticallyImplyLeading: false,
       title: Row(
         children: [

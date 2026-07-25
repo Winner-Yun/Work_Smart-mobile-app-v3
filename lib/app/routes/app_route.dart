@@ -7,10 +7,8 @@ import 'package:flutter_worksmart_app/features/user/presentation/attendence_scre
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_detail_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_all_requests_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/sick_leave_request_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen_web_stub.dart'
-    if (dart.library.io) 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen_web_stub.dart'
-    if (dart.library.io) 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/leave_management_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/notification_screens.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/mainscreen.dart';

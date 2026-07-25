@@ -61,8 +61,6 @@ class _HomePageScreenState extends HomePageLogic {
       return const Scaffold(body: SafeArea(child: HomePageSkeletonLoading()));
     }
 
-    final bool isFaceApproved = currentFaceStatus == 'approved';
-
     return SafeArea(
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -96,7 +94,7 @@ class _HomePageScreenState extends HomePageLogic {
                         ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
                         const SizedBox(height: 20),
 
-                        if (isFaceApproved)
+                        if (hasLocalFaceEmbedding)
                           (shouldShowCheckOutDeadlineCard
                                   ? _buildScanDeadlineCard(context)
                                   : hasMockScanSuccess
@@ -306,39 +304,6 @@ class _HomePageScreenState extends HomePageLogic {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.green.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.check_circle_rounded,
-                                size: 10,
-                                color: Colors.green,
-                              ),
-                              SizedBox(width: 3),
-                              Text(
-                                'Active',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 3),
@@ -363,100 +328,118 @@ class _HomePageScreenState extends HomePageLogic {
             color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
           ),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.group_outlined,
-                          size: 15,
-                          color: primaryColor,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '$workspaceMemberCount Members',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+
+          // --- RESPONSIVE BOTTOM SECTION ---
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing:
+                  8, // Horizontal space between the badge group and switch button
+              runSpacing:
+                  10, // Vertical space when the switch button wraps to a new line
+              children: [
+                Wrap(
+                  spacing: 8, // Horizontal space between Member and Zone badges
+                  runSpacing:
+                      8, // Vertical space if the badges themselves need to wrap
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize:
+                            MainAxisSize.min, // Ensures tight fit inside Wrap
+                        children: [
+                          Icon(
+                            Icons.group_outlined,
+                            size: 15,
                             color: primaryColor,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade700.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 15,
-                          color: Colors.amber.shade700,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '${scanRangeMeters.toInt()}m Zone',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.amber.shade800,
+                          const SizedBox(width: 5),
+                          Text(
+                            '$workspaceMemberCount Members',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: primaryColor,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              if (widget.onSwitchWorkspace != null)
-                InkWell(
-                  onTap: widget.onSwitchWorkspace,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 4,
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Switch',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: primaryColor,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade700.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize:
+                            MainAxisSize.min, // Ensures tight fit inside Wrap
+                        children: [
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 15,
+                            color: Colors.amber.shade700,
                           ),
-                        ),
-                        const SizedBox(width: 2),
-                        Icon(
-                          Icons.swap_horiz_rounded,
-                          size: 16,
-                          color: primaryColor,
-                        ),
-                      ],
+                          const SizedBox(width: 5),
+                          Text(
+                            '${scanRangeMeters.toInt()}m Zone',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-            ],
+                if (widget.onSwitchWorkspace != null)
+                  InkWell(
+                    onTap: widget.onSwitchWorkspace,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize:
+                            MainAxisSize.min, // Ensures tight fit inside Wrap
+                        children: [
+                          Text(
+                            'Switch',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: primaryColor,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            Icons.swap_horiz_rounded,
+                            size: 16,
+                            color: primaryColor,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -464,14 +447,10 @@ class _HomePageScreenState extends HomePageLogic {
   }
 
   Widget _buildLiveMapCard(BuildContext context) {
-    final bool isHoliday = isTodayOfficeHoliday;
     final bool isDeadlineBlocked = isAttendanceScanBlockedByDeadline;
-    final bool isScanBlocked = isAttendanceScanDisabled;
+
     final bool canScanAttendance =
-        isInRange &&
-        !isSelectedScanCompleted &&
-        !isScanCooldownActive &&
-        !isScanBlocked;
+        isInRange && !isSelectedScanCompleted && !isScanCooldownActive;
 
     String getFormattedDistance(String statusText) {
       if (!statusText.contains("m")) return "--";
@@ -498,9 +477,7 @@ class _HomePageScreenState extends HomePageLogic {
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: isScanBlocked
-              ? Colors.red
-              : Theme.of(context).colorScheme.primary,
+          color: Theme.of(context).colorScheme.primary,
           width: 3,
         ),
         boxShadow: [
@@ -562,49 +539,55 @@ class _HomePageScreenState extends HomePageLogic {
                 Positioned(
                   top: 16,
                   left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardTheme.color,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
+                  right: 16,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isInRange
-                                ? Theme.of(context).colorScheme.primary
-                                : Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ).animate(onPlay: (c) => c.repeat()).fade().scale(),
-                        const SizedBox(width: 6),
-                        Text(
-                          isInRange
-                              ? AppStrings.tr('office_zone')
-                              : AppStrings.tr('outside_zone'),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isInRange
-                                ? Theme.of(context).colorScheme.primary
-                                : Colors.red[700],
-                          ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardTheme.color,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: isInRange
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ).animate(onPlay: (c) => c.repeat()).fade().scale(),
+                            const SizedBox(width: 6),
+                            Text(
+                              isInRange
+                                  ? AppStrings.tr('office_zone')
+                                  : AppStrings.tr('outside_zone'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isInRange
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.red[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 if (checkOutDeadlineLabel != '--:--')
@@ -647,6 +630,44 @@ class _HomePageScreenState extends HomePageLogic {
                       ),
                     ),
                   ),
+
+                Positioned(
+                  top: 50,
+                  right: 16,
+                  child: ElevatedButton.icon(
+                    onPressed: isFaceEmbeddingUpdating
+                        ? null
+                        : () => _showUpdateFaceConfirmationDialog(context),
+                    icon: isFaceEmbeddingUpdating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.sync, size: 18),
+                    label: Icon(Icons.face),
+
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      minimumSize: const Size(0, 32), // Match chip height
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          30,
+                        ), // Same rounded style
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -673,13 +694,7 @@ class _HomePageScreenState extends HomePageLogic {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            // Developer options / mock-location detection:
-                            // if developer mode (USB debugging, mock location,
-                            // etc.) is detected on the device, show a warning
-                            // label instead of the normal GPS status text.
-                            isHoliday
-                                ? AppStrings.tr('holiday_today')
-                                : isDeadlineBlocked
+                            isDeadlineBlocked
                                 ? AppStrings.tr('deadline_passed')
                                 : isInRange
                                 ? AppStrings.tr('ready_to_scan')
@@ -691,9 +706,7 @@ class _HomePageScreenState extends HomePageLogic {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
-                              color: isScanBlocked
-                                  ? Colors.red[700]
-                                  : isInRange
+                              color: isInRange
                                   ? Theme.of(context).colorScheme.primary
                                   : Colors.red,
                             ),
@@ -759,6 +772,7 @@ class _HomePageScreenState extends HomePageLogic {
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 20),
                 Container(
                   width: double.infinity,
@@ -1395,6 +1409,42 @@ class _HomePageScreenState extends HomePageLogic {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUpdateFaceConfirmationDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Update Face Data',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Are you sure you want to pull the latest face embedding data from the server and replace your local vector?',
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              updateFaceEmbeddingVector(); // Calls logic to hit API & save locally
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirm'),
           ),
         ],
       ),

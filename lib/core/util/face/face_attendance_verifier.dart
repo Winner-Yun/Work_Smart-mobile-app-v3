@@ -7,7 +7,9 @@ import 'package:detect_fake_location/detect_fake_location.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/face_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/face_service.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'package:ntp/ntp.dart';
@@ -60,8 +62,8 @@ class AttendanceVerificationResult {
 
 /// Main attendance verification: security checks → face match → liveness
 class FaceAttendanceVerifier {
-  FaceAttendanceVerifier({RealtimeDataController? dataController})
-    : _dataController = dataController ?? RealtimeDataController(),
+  FaceAttendanceVerifier({FaceRepository? faceRepository})
+    : _faceRepo = faceRepository ?? FaceRepository(FaceService()),
       _faceDetector = FaceDetector(
         options: FaceDetectorOptions(
           enableClassification: true,
@@ -77,9 +79,48 @@ class FaceAttendanceVerifier {
   static const double _livenessYawThreshold = 6;
   static const double _livenessPitchMax = 25;
 
-  final RealtimeDataController _dataController;
+  final FaceRepository _faceRepo;
   final FaceDetector _faceDetector;
   Interpreter? _interpreter;
+
+  Future<Map<String, dynamic>?> _resolveFaceRecord({
+    required String userId,
+    Map<String, dynamic>? localEmbeddingData,
+  }) async {
+    if (localEmbeddingData != null) {
+      return localEmbeddingData;
+    }
+
+    try {
+      final cached = await DatabaseHelper().getFaceEmbedding(userId);
+      if (cached != null) {
+        return cached;
+      }
+    } catch (e) {
+      debugPrint('Failed to read cached face embedding: $e');
+    }
+
+    Map<String, dynamic>? record;
+    try {
+      final rawData = await _faceRepo.getMyFaceEmbeddings();
+      final dataMap = (rawData.containsKey('data') && rawData['data'] is Map)
+          ? Map<String, dynamic>.from(rawData['data'])
+          : rawData;
+      record = hasUsableFaceEmbedding(dataMap) ? dataMap : null;
+    } catch (e) {
+      debugPrint('FaceRepository.getMyFaceEmbeddings failed: $e');
+    }
+
+    if (record != null) {
+      try {
+        await DatabaseHelper().saveFaceEmbedding(userId, record);
+      } catch (e) {
+        debugPrint('Failed to cache face embedding locally: $e');
+      }
+    }
+
+    return record;
+  }
 
   /// Cleanup resources
   Future<void> close() async {
@@ -88,13 +129,14 @@ class FaceAttendanceVerifier {
     _interpreter = null;
   }
 
-  /// Verify attendance: security → face match → liveness
   Future<AttendanceVerificationResult> verifyAttendance({
     required CameraController cameraController,
     required String userId,
     required Future<void> Function(bool enabled) onFlashOverlay,
     required void Function(VerificationProgress progress) onProgress,
     bool skipLivenessChallenges = false,
+    Map<String, dynamic>? localEmbeddingData,
+    Map<String, dynamic>? localUserData, // ADDED: Accept local user profile
   }) async {
     onProgress(
       const VerificationProgress(
@@ -103,14 +145,23 @@ class FaceAttendanceVerifier {
       ),
     );
 
-    final Map<String, dynamic>? userRecord = await _dataController
-        .fetchUserRecordById(userId);
+    // Check the passed-in local profile first, fall back to the local cache.
+    final Map<String, dynamic>? userRecord =
+        localUserData ?? await DatabaseHelper().getUserProfile();
+
     if (userRecord == null) {
       return _fail('User profile not found for verification.');
     }
 
-    final Map<String, dynamic>? faceRecord = await _dataController
-        .fetchUserFaceBiometrics(userId);
+    // Local face embedding fallback
+    final Map<String, dynamic>? faceRecord = await _resolveFaceRecord(
+      userId: userId,
+      localEmbeddingData: localEmbeddingData,
+    );
+
+    if (faceRecord == null) {
+      return _fail('User face biometrics not found for verification.');
+    }
 
     /// Validate device security
     final SecurityValidationResult securityValidation = await _validateSecurity(
@@ -626,8 +677,16 @@ class FaceAttendanceVerifier {
     return embedding.map((v) => v / norm).toList(growable: false);
   }
 
+  /// Whether a raw face record (from local cache or the API) actually
+  /// contains an embedding vector usable for verification. Shared by the
+  /// verifier itself and by callers (e.g. the homepage) that need to decide
+  /// whether a face is registered, so both agree on the same definition.
+  static bool hasUsableFaceEmbedding(Map<String, dynamic>? record) {
+    return _extractStoredEmbeddings(record).isNotEmpty;
+  }
+
   /// Extract enrolled embeddings
-  List<List<double>> _extractStoredEmbeddings(
+  static List<List<double>> _extractStoredEmbeddings(
     Map<String, dynamic>? faceRecord,
   ) {
     final Map<String, dynamic> enrollment = _asMap(faceRecord);
@@ -692,7 +751,7 @@ class FaceAttendanceVerifier {
         .toList(growable: false);
   }
 
-  double _readEmbeddingScale(Map<String, dynamic> enrollment) {
+  static double _readEmbeddingScale(Map<String, dynamic> enrollment) {
     final dynamic rawScale =
         enrollment['face_embedding_scale'] ?? enrollment['scale'];
     return rawScale is num
@@ -783,7 +842,7 @@ class FaceAttendanceVerifier {
     return Rect.fromLTRB(left, top, right, bottom);
   }
 
-  Map<String, dynamic> _asMap(dynamic value) {
+  static Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) {
       return value;
     }

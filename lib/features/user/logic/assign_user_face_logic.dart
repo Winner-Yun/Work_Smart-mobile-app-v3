@@ -2,24 +2,27 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/default_profile_urls.dart';
 import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
-import 'package:flutter_worksmart_app/core/util/face/face_biometrics_repository.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
+// Import the newly created Repository and Service
+import 'package:flutter_worksmart_app/features/user/auth/repository/face_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/profile_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/face_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/profile_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/face_embedding_loading_dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
-  static const int _embeddingScale = 1000;
-
   CameraController? controller;
   List<CameraDescription> cameras = [];
   bool isCameraInitialized = false;
@@ -36,8 +39,13 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
 
   final RealtimeDataController _realtimeDataController =
       RealtimeDataController();
-  final FaceBiometricsRepository _faceBiometricsRepository =
-      FaceBiometricsRepository();
+
+  // Use the new FaceRepository for API connection[cite: 6]
+  final FaceRepository _faceRepository = FaceRepository(FaceService());
+  final ProfileRepository _profileRepository = ProfileRepository(
+    ProfileService(),
+  );
+
   final CloudinaryProfileImageService _cloudinaryProfileImageService =
       CloudinaryProfileImageService();
   final List<String> _capturedFaceImageUrls = <String>[];
@@ -194,22 +202,11 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       return;
     }
 
-    String? previousFaceImageUrl;
-    try {
-      final Map<String, dynamic>? faceRecord = await _faceBiometricsRepository
-          .fetchFaceEnrollment(userId);
-      previousFaceImageUrl = _extractPrimaryFaceImageUrl(faceRecord);
-    } catch (_) {
-      // Ignore fetch issues and continue with upload.
-    }
-
     setState(() => isUploadingFaceSample = true);
 
     try {
       final XFile captured = await controller!.takePicture();
 
-      // Re-validate the actual captured frame so movement during countdown
-      // cannot pass through and be uploaded as a valid training sample.
       final capturedFaces = await FaceDetectionUtil.detectFacesInImage(
         captured,
       );
@@ -240,31 +237,25 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         );
       }
 
-      final List<int> compressedEmbedding = embedding
-          .map((value) => (value * _embeddingScale).round())
-          .toList(growable: false);
-
-      final List<double> normalizedEmbedding = compressedEmbedding
-          .map((value) => value / _embeddingScale)
-          .toList(growable: false);
-
+      // We still upload to Cloudinary to offer the "Set Profile Photo"
       final String imageUrl = await _cloudinaryProfileImageService
           .uploadFaceSampleImage(
             imageFile: File(captured.path),
             userId: userId,
             sampleIndex: currentPhotoCount + 1,
-            previousImageUrl: previousFaceImageUrl,
+            previousImageUrl: null,
           );
 
       _lastCapturedFaceFilePath = captured.path;
 
-      // Only save the face sample and embedding, no matching or approval.
       _capturedFaceImageUrls
         ..clear()
         ..add(imageUrl);
+
+      // Store the raw embedding array[cite: 6]
       _capturedEmbeddings
         ..clear()
-        ..add(normalizedEmbedding);
+        ..add(embedding);
 
       if (!mounted) return;
 
@@ -272,24 +263,9 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         if (currentPhotoCount < totalRequired) currentPhotoCount++;
       });
 
-      // Immediately save registration after capture (no approval/match step)
       if (currentPhotoCount == totalRequired) {
         await onComplete();
       }
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      final code = e.code.toLowerCase();
-      final message = code == 'permission-denied'
-          ? 'Firestore permission denied. Please update Firebase rules.'
-          : (e.message ?? e.toString());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${AppStrings.tr('face_sample_upload_failed')}: $message',
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -306,25 +282,10 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
   }
 
   Future<void> onComplete() async {
-    final String userId = _resolveUserId();
-    if (userId.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.tr('unable_to_resolve_user_id'))),
-      );
-      return;
-    }
-
-    if (_capturedFaceImageUrls.isEmpty) {
-      return;
-    }
+    if (_capturedEmbeddings.isEmpty) return;
 
     try {
-      final List<int> embeddingVector = _capturedEmbeddings.isNotEmpty
-          ? _capturedEmbeddings.first
-                .map((value) => (value * _embeddingScale).round())
-                .toList(growable: false)
-          : <int>[];
+      final List<double> embeddingVector = _capturedEmbeddings.first;
 
       if (embeddingVector.isEmpty) {
         throw Exception(
@@ -332,27 +293,58 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         );
       }
 
-      final String registeredDate = DateTime.now().toIso8601String();
-      final Map<String, dynamic> biometricsSummary = _faceBiometricsRepository
-          .buildFaceMetadata(
-            status: 'approved',
-            registeredDate: registeredDate,
-            imageUrl: _capturedFaceImageUrls.first,
-          );
-
-      await _faceBiometricsRepository.saveFaceEnrollment(
-        userId: userId,
-        embeddingVector: embeddingVector,
-        embeddingScale: _embeddingScale,
-        metadata: biometricsSummary,
+      // 1. Show the loading dialog before starting the data transfer
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => const FaceEmbeddingLoadingDialog(
+          title: 'Processing Face Vector...',
+          subtitle: 'Extracting embeddings & syncing with server',
+        ),
       );
+
+      // 2. Call the API via the new Repository
+      await _faceRepository.registerFace(embeddingVector);
+
+      // 3. Cache the same embedding locally so the homepage/scan flow can see
+      // it immediately, without waiting on a separate server round-trip.
+      final String userId = _resolveUserId();
+      if (userId.isNotEmpty) {
+        try {
+          await DatabaseHelper().saveFaceEmbedding(userId, {
+            'face_embeddings': embeddingVector,
+          });
+          debugPrint(
+            '[RegisterFaceLogic] Saved face embedding to local DB for $userId',
+          );
+        } catch (e) {
+          debugPrint(
+            '[RegisterFaceLogic] Failed to cache embedding locally: $e',
+          );
+        }
+      }
+
+      // 4. Dismiss the dialog once the backend processing is complete
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
       if (!mounted) return;
       await onFaceRegistrationCompleted();
     } catch (e) {
+      // Ensure the dialog is dismissed if an error occurs
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
       if (!mounted) return;
+      // Clean exception prefix for UI display
+      final cleanError = e.toString().replaceAll('Exception: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${AppStrings.tr('face_sample_upload_failed')}: $e'),
+          content: Text(
+            '${AppStrings.tr('face_sample_upload_failed')}: $cleanError',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -417,59 +409,33 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
           .map(_normalizeUrlForCompare)
           .contains(normalizedCurrent);
     } catch (_) {
-      // If profile cannot be resolved, avoid prompting unexpectedly.
       return false;
     }
   }
 
   Future<void> applyRegisteredFaceAsProfileImage(String imageUrl) async {
-    final String userId = _resolveUserId();
-    if (userId.isEmpty || imageUrl.trim().isEmpty) {
+    final String? localFacePath = _lastCapturedFaceFilePath;
+
+    if (localFacePath == null || localFacePath.trim().isEmpty) {
       return;
     }
 
-    String profileImageUrl = imageUrl;
+    final File localFaceFile = File(localFacePath);
+    if (!await localFaceFile.exists()) {
+      return;
+    }
 
     try {
-      final Map<String, dynamic>? userRecord = await _realtimeDataController
-          .fetchUserRecordById(userId);
-      final String? existingProfileUrl = _extractCurrentProfileImageUrl(
-        userRecord,
+      // Call the new backend endpoint directly with the captured file
+      await _profileRepository.updateProfileImage(localFaceFile);
+
+      debugPrint(
+        '[RegisterFaceLogic] Profile image updated successfully via backend',
       );
-
-      final String? localFacePath = _lastCapturedFaceFilePath;
-      if (localFacePath != null && localFacePath.trim().isNotEmpty) {
-        final File localFaceFile = File(localFacePath);
-        if (await localFaceFile.exists()) {
-          profileImageUrl = await _cloudinaryProfileImageService
-              .uploadProfileImage(
-                imageFile: localFaceFile,
-                userId: userId,
-                previousImageUrl: existingProfileUrl,
-              );
-        }
-      }
-    } catch (_) {
-      // Fallback to the face image URL if profile upload fails.
+    } catch (e) {
+      debugPrint('[RegisterFaceLogic] Failed to update profile image: $e');
+      rethrow;
     }
-
-    await _realtimeDataController.updateUserRecord(userId, {
-      'profile_url': profileImageUrl,
-      'profile_image_url': profileImageUrl,
-    });
-  }
-
-  String? _extractPrimaryFaceImageUrl(Map<String, dynamic>? faceRecord) {
-    final Object? rawUrls = faceRecord?['face_image_urls'];
-    if (rawUrls is List) {
-      for (final Object? value in rawUrls) {
-        final String url = (value ?? '').toString().trim();
-        if (url.isNotEmpty) {
-          return url;
-        }
-      }
-    }
-    return null;
   }
 
   String? _extractCurrentProfileImageUrl(Map<String, dynamic>? userRecord) {

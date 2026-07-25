@@ -23,7 +23,7 @@ class DatabaseHelper {
     // to ensure migrations run when the version is bumped.
     if (_database != null) {
       final currentVersion = await _database!.getVersion();
-      if (currentVersion < 6) {
+      if (currentVersion < 8) {
         await _database!.close();
         _database = null;
       }
@@ -39,7 +39,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6, // Bumped to 6 for user_profile_cache table
+      version: 8, // Bumped to 8: face_embedding_cache was missing from onCreate
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE settings (
@@ -69,6 +69,14 @@ class DatabaseHelper {
             user_id TEXT NOT NULL,
             profile_data TEXT NOT NULL,
             cached_at INTEGER NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS face_embedding_cache (
+            user_id TEXT PRIMARY KEY,
+            embedding_data TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
           )
         ''');
       },
@@ -110,6 +118,20 @@ class DatabaseHelper {
                 user_id TEXT NOT NULL,
                 profile_data TEXT NOT NULL,
                 cached_at INTEGER NOT NULL
+              )
+            ''');
+          } on DatabaseException catch (e) {
+            e.toString();
+          }
+        }
+
+        if (oldVersion < 8) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS face_embedding_cache (
+                user_id TEXT PRIMARY KEY,
+                embedding_data TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
               )
             ''');
           } on DatabaseException catch (e) {
@@ -455,6 +477,52 @@ class DatabaseHelper {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  /// =========================
+  /// FACE EMBEDDING CACHE
+  /// =========================
+
+  Future<void> saveFaceEmbedding(
+    String userId,
+    Map<String, dynamic> embeddingData,
+  ) async {
+    final dataJson = jsonEncode(embeddingData);
+    final updatedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('face_embedding_$userId', dataJson);
+    } else {
+      final db = await database;
+      await db!.insert('face_embedding_cache', {
+        'user_id': userId,
+        'embedding_data': dataJson,
+        'updated_at': updatedAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  Future<Map<String, dynamic>?> getFaceEmbedding(String userId) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final data = prefs.getString('face_embedding_$userId');
+      if (data != null) {
+        return Map<String, dynamic>.from(jsonDecode(data));
+      }
+    } else {
+      final db = await database;
+      final maps = await db!.query(
+        'face_embedding_cache',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      if (maps.isNotEmpty) {
+        final data = maps.first['embedding_data'] as String;
+        return Map<String, dynamic>.from(jsonDecode(data));
+      }
+    }
     return null;
   }
 }

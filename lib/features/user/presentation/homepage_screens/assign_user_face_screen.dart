@@ -22,6 +22,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
   bool _faceQualityPassed = false;
   bool _hasAcceptedPreScanGuide = false;
   bool _showCaptureFeedback = false;
+
   bool _showSuccessSplash = false;
   bool _completionFlowRunning = false;
   int _lastSeenCapturedCount = 0;
@@ -61,6 +62,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
 
     if (!mounted) return;
 
+    if (!mounted) return;
     final String? faceImageUrl = latestCapturedFaceImageUrl;
     final bool shouldOfferProfilePrompt = await shouldOfferFaceAsProfileImage();
 
@@ -162,16 +164,53 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
       if (!mounted) return;
 
       if (result == 'crop') {
-        await applyRegisteredFaceAsProfileImage(faceImageUrl);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppStrings.tr('profile_photo_updated')),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-          ),
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext loadingContext) {
+            return const PopScope(
+              canPop: false,
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
+              ),
+            );
+          },
         );
+
+        try {
+          // Call your repository endpoint
+          await applyRegisteredFaceAsProfileImage(faceImageUrl);
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppStrings.tr('profile_photo_updated')),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update profile image: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        } finally {
+          // Dismiss normal loading dialog cleanly
+          if (mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+        }
       }
     }
+
+    // =========================================================
+    // PHASE 4: FINISH AND RETURN
+    // =========================================================
 
     try {
       await returnToHomepage();
@@ -332,7 +371,6 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
       final face = faces.first;
       final imageSize = await FaceDetectionUtil.getImageSize(imageFile);
 
-      // Validate face quality using utility
       final validationError = await FaceDetectionUtil.validateFaceQuality(
         face,
         imageSize,
@@ -348,7 +386,6 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
         return;
       }
 
-      // All checks passed - auto-capture
       setState(() {
         _lastFaceClearanceMessage = AppStrings.tr('face_quality_ok');
         _faceQualityPassed = true;
@@ -358,7 +395,6 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
       final heldLongEnough =
           DateTime.now().difference(_greenSince!) >= _greenHoldDuration;
 
-      // Capture only after face stays green continuously for a short hold.
       if (heldLongEnough &&
           !isCaptureBusy &&
           currentPhotoCount < totalRequired) {
