@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_worksmart_app/features/user/auth/service/profile_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/profile_service.dart';
 
 class ProfileRepository {
   final ProfileService _service;

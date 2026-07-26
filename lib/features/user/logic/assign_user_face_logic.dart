@@ -9,16 +9,19 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/default_profile_urls.dart';
 import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
+import 'package:flutter_worksmart_app/core/util/device/device_info_helper.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
 // Import the newly created Repository and Service
-import 'package:flutter_worksmart_app/features/user/auth/repository/face_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/profile_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/face_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/profile_service.dart';
+import 'package:flutter_worksmart_app/features/user/repository/face_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/profile_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/face_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/profile_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/face_embedding_loading_dialog.dart';
+import 'package:flutter_worksmart_app/shared/model/user_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
@@ -36,9 +39,6 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
   late AnimationController laserController;
   bool isUploadingFaceSample = false;
   bool isApprovingFace = false;
-
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
 
   // Use the new FaceRepository for API connection[cite: 6]
   final FaceRepository _faceRepository = FaceRepository(FaceService());
@@ -102,19 +102,79 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
   }
 
   Future<void> startCamera(CameraDescription desc) async {
-    if (controller != null) await controller!.dispose();
-    controller = CameraController(
-      desc,
-      ResolutionPreset.high,
-      enableAudio: false,
-    );
-    try {
-      await controller!.initialize();
-      isBackCamera = desc.lensDirection == CameraLensDirection.back;
-      if (mounted) setState(() => isCameraInitialized = true);
-    } catch (e) {
-      debugPrint(e.toString());
+    if (controller != null) {
+      await controller!.dispose();
+      controller = null;
     }
+    if (mounted) setState(() => isCameraInitialized = false);
+
+    // Immediately after another screen (e.g. the face-verify step) releases
+    // the camera, the hardware can briefly report "busy" while it tears
+    // down. Retry with backoff instead of failing silently and leaving the
+    // screen stuck on its loading spinner forever.
+    const int maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      final CameraController candidate = CameraController(
+        desc,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      try {
+        await candidate.initialize();
+        if (!mounted) {
+          await candidate.dispose();
+          return;
+        }
+        controller = candidate;
+        isBackCamera = desc.lensDirection == CameraLensDirection.back;
+        setState(() => isCameraInitialized = true);
+        return;
+      } catch (e) {
+        debugPrint(
+          '[RegisterFaceLogic] Camera init attempt $attempt/$maxAttempts failed: $e',
+        );
+        try {
+          await candidate.dispose();
+        } catch (_) {}
+
+        if (attempt == maxAttempts) {
+          if (mounted) {
+            await _showCameraInitFailedDialog();
+          }
+          return;
+        }
+        await Future.delayed(Duration(milliseconds: 350 * attempt));
+      }
+    }
+  }
+
+  Future<void> _showCameraInitFailedDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Camera Unavailable'),
+          content: const Text(
+            'Unable to start the camera. It may still be in use by another '
+            'part of the app. Please try again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                initCamera();
+              },
+              child: const Text('Retry'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _showCameraPermissionRequiredDialog() async {
@@ -311,9 +371,11 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       final String userId = _resolveUserId();
       if (userId.isNotEmpty) {
         try {
-          await DatabaseHelper().saveFaceEmbedding(userId, {
+          final String deviceInfo =
+              await DeviceInfoHelper.describeCurrentDevice();
+          await DatabaseHelper().saveFaceEmbeddingWithHistory(userId, {
             'face_embeddings': embeddingVector,
-          });
+          }, deviceInfo: deviceInfo);
           debugPrint(
             '[RegisterFaceLogic] Saved face embedding to local DB for $userId',
           );
@@ -379,22 +441,18 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     }
 
     try {
-      final Map<String, dynamic>? userRecord = await _realtimeDataController
-          .fetchUserRecordById(userId);
-      final String? currentProfileUrl = _extractCurrentProfileImageUrl(
-        userRecord,
-      );
+      final UserModel userModel = await UserRepository(
+        UserService(),
+      ).getUserProfile();
+      final String currentProfileUrl = userModel.avatar.trim();
 
-      if (currentProfileUrl == null || currentProfileUrl.isEmpty) {
+      if (currentProfileUrl.isEmpty) {
         return true;
       }
 
-      final String gender =
-          (userRecord?['gender'] ??
-                  userRecord?['sex'] ??
-                  widget.loginData?['gender'] ??
-                  '')
-              .toString();
+      final String gender = userModel.gender.isNotEmpty
+          ? userModel.gender
+          : (widget.loginData?['gender'] ?? '').toString();
 
       final Set<String> defaultUrls = <String>{
         DefaultProfileUrls.male,
@@ -436,14 +494,6 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       debugPrint('[RegisterFaceLogic] Failed to update profile image: $e');
       rethrow;
     }
-  }
-
-  String? _extractCurrentProfileImageUrl(Map<String, dynamic>? userRecord) {
-    final String profileUrl =
-        (userRecord?['profile_url'] ?? userRecord?['profile_image_url'] ?? '')
-            .toString()
-            .trim();
-    return profileUrl.isEmpty ? null : profileUrl;
   }
 
   String _normalizeUrlForCompare(String url) {

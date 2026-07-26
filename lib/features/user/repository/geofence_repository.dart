@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/geofence_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/geofence_service.dart';
 import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
 
 class GeofenceRepository {

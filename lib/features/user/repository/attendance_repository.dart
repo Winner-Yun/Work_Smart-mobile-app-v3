@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 
 class AttendanceRepository {

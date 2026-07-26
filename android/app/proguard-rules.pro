@@ -29,8 +29,7 @@
     public static final android.os.Parcelable$Creator *;
 }
 
-# Firebase and Google Services
--keep class com.google.firebase.** { *; }
+# Google Services (Google Sign-In, Maps, ML Kit)
 -keep class com.google.android.gms.** { *; }
 
 # Preserve line numbers for debugging

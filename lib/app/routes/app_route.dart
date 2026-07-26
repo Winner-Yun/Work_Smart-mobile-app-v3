@@ -9,11 +9,10 @@ import 'package:flutter_worksmart_app/features/user/presentation/attendence_scre
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/sick_leave_request_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/invites_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/leave_management_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/notification_screens.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/mainscreen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/help_support_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/telegram_integration.dart';
 
 /// AppRoute: Central routing configuration
 ///
@@ -25,7 +24,6 @@ class AppRoute {
   static const String leaderboardScreen = '/leaderboardScreen';
   static const String achievementScreen = '/achievementScreen';
   static const String attendanCalendarScreen = '/callenderScreen';
-  static const String notificationScreen = '/notificationScreen';
   static const String forgotpassScreen = '/forgotpassScreen';
   static const String leaveDatailScreen = '/leaveDetailScreen';
   static const String faceScanScreen = '/faceScanScreen';
@@ -34,9 +32,9 @@ class AppRoute {
   static const String annualleaveScreen = '/annualleaveScreen-screen';
   static const String leaveAllRequestsScreen = '/leaveAllRequestsScreen';
   static const String settingScreen = '/settingScreen';
-  static const String telegramConfig = '/telegramConfig';
   static const String helpSupportScreen = '/helpSupportScreen';
   static const String registerFace = '/registerFace';
+  static const String invitesScreen = '/invitesScreen';
 
   // ──────────────── ROUTE DEFINITIONS ────────────────
 
@@ -84,14 +82,11 @@ class AppRoute {
       (args) => RegisterFaceScanScreen(loginData: args),
     ),
 
-    // Notification Routes
-    notificationScreen: _buildRoute(
-      (args) => NotificationScreen(loginData: args),
-    ),
-
     // Settings Routes
-    telegramConfig: _buildRoute((args) => TelegramIntegration(loginData: args)),
     helpSupportScreen: (context) => const HelpSupportScreen(),
+
+    // Invite Routes
+    invitesScreen: _buildRoute((args) => InvitesScreen(loginData: args)),
   };
 
   static WidgetBuilder _buildRoute(

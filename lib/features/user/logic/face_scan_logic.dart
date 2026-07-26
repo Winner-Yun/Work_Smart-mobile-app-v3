@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
+import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/face_embedding_loading_dialog.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 abstract class FaceScanLogic extends State<FaceScanScreen>

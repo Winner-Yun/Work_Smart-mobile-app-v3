@@ -64,7 +64,10 @@ class _FaceScanScreenState extends FaceScanLogic {
       ),
       centerTitle: true,
       title: Text(
-        AppStrings.tr('face_scan_title'),
+        (widget.loginData?['scanType'] ?? '').toString().trim() ==
+                FaceScanLogic.scanTypeVerifyOnly
+            ? AppStrings.tr('verify_identity_title')
+            : AppStrings.tr('face_scan_title'),
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,

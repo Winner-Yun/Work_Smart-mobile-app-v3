@@ -7,6 +7,7 @@ import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 enum GoogleReauthStatus { success, cancelled, emailMismatch, error }
@@ -196,6 +197,7 @@ class AuthLogic {
   Future<GoogleReauthResult> reauthenticateForSensitiveAction({
     required String expectedEmail,
   }) async {
+    _showConnectingGoogleDialog();
     try {
       await _ensureGoogleSignInInitialized();
 
@@ -213,7 +215,10 @@ class AuthLogic {
         return const GoogleReauthResult(GoogleReauthStatus.emailMismatch);
       }
 
-      return GoogleReauthResult(GoogleReauthStatus.success, email: signedInEmail);
+      return GoogleReauthResult(
+        GoogleReauthStatus.success,
+        email: signedInEmail,
+      );
     } on GoogleSignInException catch (e) {
       if (e.code == 'sign_in_canceled' || e.code == 'canceled') {
         return const GoogleReauthResult(GoogleReauthStatus.cancelled);
@@ -221,7 +226,30 @@ class AuthLogic {
       return const GoogleReauthResult(GoogleReauthStatus.error);
     } catch (_) {
       return const GoogleReauthResult(GoogleReauthStatus.error);
+    } finally {
+      _dismissConnectingGoogleDialog();
     }
+  }
+
+  /// Shows a blocking "Connecting to Google..." indicator so the user knows
+  /// something is happening while `initialize()`/`signOut()` run and the
+  /// native account picker is being prepared. Dismissed as soon as
+  /// [reauthenticateForSensitiveAction] resolves either way.
+  void _showConnectingGoogleDialog() {
+    if (!context.mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => FaceEmbeddingLoadingDialog(
+        title: AppStrings.tr('connecting_google_title'),
+        subtitle: AppStrings.tr('connecting_google_subtitle'),
+      ),
+    );
+  }
+
+  void _dismissConnectingGoogleDialog() {
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   Future<void> signOut() async {

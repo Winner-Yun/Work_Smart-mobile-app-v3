@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 
 class WorkspaceRepository {

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/attendance_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/attendance_record.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
+import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
-  late UserProfile currentUser;
-  late List<AttendanceRecord> userAttendanceRecords;
+  late UserModel currentUser;
+  late List<AttendanceModel> userAttendanceRecords;
   late List<Map<String, dynamic>> monthlyStats = [];
   late String? loggedInUserId;
 
@@ -18,8 +19,6 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   String selectedFilter = 'All';
   late int selectedMonthIndex = 0;
   late int selectedYear;
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
   final AttendanceRepository _attendanceRepo = AttendanceRepository(
     AttendanceService(),
   );
@@ -65,42 +64,31 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
         .trim();
   }
 
+  /// REST profile, falling back to the local cache if the network call fails.
+  Future<UserModel> _resolveCurrentUser() async {
+    try {
+      return await UserRepository(UserService()).getUserProfile();
+    } catch (_) {
+      final cached = await DatabaseHelper().getUserProfile();
+      return UserModel.fromJson(cached ?? const <String, dynamic>{});
+    }
+  }
+
   Future<void> _loadData() async {
     try {
-      final users = await _realtimeDataController.fetchUserRecords();
-
-      final currentUserData = users.firstWhere(
-        (user) =>
-            (user['uid'] ?? user['user_id'] ?? user['userId'])
-                ?.toString()
-                .trim() ==
-            (loggedInUserId ?? _resolveUserId()),
-        orElse: () => defaultUserRecord,
-      );
-
-      currentUser = UserProfile.fromJson(currentUserData);
+      currentUser = await _resolveCurrentUser();
 
       final prefs = await SharedPreferences.getInstance();
       final workspaceId = prefs.getString('selected_workspace_id') ?? '';
 
-      final attendanceRecords = workspaceId.isEmpty
-          ? <Map<String, dynamic>>[]
-          : (await _attendanceRepo.getMyAttendance(
+      userAttendanceRecords = workspaceId.isEmpty
+          ? <AttendanceModel>[]
+          : await _attendanceRepo.getMyAttendance(
               workspaceId,
               sortBy: 'date',
               sortOrder: 'desc',
               limit: 500,
-            ))
-                .map((record) {
-                  final map = record.toLegacyMap();
-                  map['uid'] = currentUser.uid;
-                  return map;
-                })
-                .toList();
-
-      userAttendanceRecords = attendanceRecords
-          .map((json) => AttendanceRecord.fromJson(json))
-          .toList();
+            );
 
       final now = DateTime.now();
       selectedYear = now.year;

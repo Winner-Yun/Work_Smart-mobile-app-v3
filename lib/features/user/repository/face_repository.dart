@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/face_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/face_service.dart';
 
 class FaceRepository {
   final FaceService _service;

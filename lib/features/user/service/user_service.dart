@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -49,10 +49,7 @@ class UserService {
     debugPrint('[UserService] Body: $updates');
 
     try {
-      final Response response = await _apiClient.patch(
-        endpoint,
-        data: updates,
-      );
+      final Response response = await _apiClient.patch(endpoint, data: updates);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data;

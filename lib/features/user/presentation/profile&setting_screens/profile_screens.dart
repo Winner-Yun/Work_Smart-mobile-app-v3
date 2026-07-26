@@ -10,19 +10,18 @@ import 'package:flutter_worksmart_app/config/theme_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/profile_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/workspace_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/profile_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
+import 'package:flutter_worksmart_app/features/user/logic/update_face_flow_controller.dart';
+import 'package:flutter_worksmart_app/features/user/repository/profile_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/workspace_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/profile_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/app_profile_avatar.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/profile_skeleton_loading.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,140 +42,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   );
   final ImagePicker _picker = ImagePicker();
 
-  static final RealtimeDataController _dataController =
-      RealtimeDataController();
-
   UserModel? _currentUser;
   String? _workspaceName;
   File? _image;
   bool _isUploadingProfileImage = false;
   bool _isLoading = true;
 
-  String? _loggedInUserId;
-  bool _isNotificationEnabled = true;
-  bool _isSavingNotification = false;
-  StreamSubscription<Map<String, dynamic>?>? _userRecordSubscription;
-
   @override
   void initState() {
     super.initState();
-    _loggedInUserId = widget.loginData?['uid']?.toString();
     _loadData();
-    _loadNotificationPreference();
-    _listenUserRecordRealtime();
-  }
-
-  @override
-  void dispose() {
-    _userRecordSubscription?.cancel();
-    super.dispose();
-  }
-
-  void _loadNotificationPreference() {
-    final String userId = (_loggedInUserId ?? '').trim();
-    if (userId.isEmpty) return;
-
-    final int index = usersFinalData.indexWhere(
-      (user) => user['uid']?.toString().trim() == userId,
-    );
-    if (index == -1) return;
-
-    final dynamic appSettings =
-        usersFinalData[index]['app_settings'] ??
-        usersFinalData[index]['app_setting'];
-    _isNotificationEnabled = _readBoolSetting(
-      appSettings is Map
-          ? (appSettings['notifications_enabled'] ??
-                appSettings['notification_enable'] ??
-                appSettings['notification_enabled'])
-          : null,
-      fallback: true,
-    );
-  }
-
-  bool _readBoolSetting(dynamic value, {required bool fallback}) {
-    if (value is bool) return value;
-    final normalized = (value ?? '').toString().trim().toLowerCase();
-    if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
-      return true;
-    }
-    if (normalized == 'false' || normalized == '0' || normalized == 'no') {
-      return false;
-    }
-    return fallback;
-  }
-
-  void _listenUserRecordRealtime() {
-    final String userId = (_loggedInUserId ?? '').trim();
-    if (userId.isEmpty) return;
-
-    _userRecordSubscription = _dataController.watchUserRecord(userId).listen((
-      record,
-    ) {
-      if (!mounted || record == null) return;
-      final dynamic appSettings =
-          record['app_settings'] ?? record['app_setting'];
-      final bool resolved = _readBoolSetting(
-        appSettings is Map
-            ? (appSettings['notifications_enabled'] ??
-                  appSettings['notification_enable'] ??
-                  appSettings['notification_enabled'])
-            : null,
-        fallback: true,
-      );
-      setState(() => _isNotificationEnabled = resolved);
-    });
-  }
-
-  Future<void> _handleNotificationChange(bool value) async {
-    if (_isSavingNotification) return;
-    final String userId = (_loggedInUserId ?? '').trim();
-    if (userId.isEmpty) return;
-
-    final bool previousValue = _isNotificationEnabled;
-    setState(() {
-      _isNotificationEnabled = value;
-      _isSavingNotification = true;
-    });
-
-    if (value) {
-      await LocalNotificationService.instance.requestPermissions();
-    } else {
-      await LocalNotificationService.instance.cancelAll();
-    }
-
-    final int userIndex = usersFinalData.indexWhere(
-      (user) => user['uid']?.toString().trim() == userId,
-    );
-    final Map<String, dynamic> appSettings =
-        userIndex != -1 && usersFinalData[userIndex]['app_settings'] is Map
-        ? Map<String, dynamic>.from(
-            usersFinalData[userIndex]['app_settings'] as Map,
-          )
-        : <String, dynamic>{};
-    appSettings['notifications_enabled'] = value;
-
-    try {
-      await _dataController.updateUserRecord(userId, {
-        'app_settings': appSettings,
-      });
-      if (userIndex != -1) {
-        usersFinalData[userIndex]['app_settings'] = appSettings;
-      }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isNotificationEnabled = previousValue);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to update notification setting.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSavingNotification = false);
-      }
-    }
   }
 
   Future<void> _handleLanguageChange(String langCode) async {
@@ -264,14 +139,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
         source: source,
         imageQuality: 80,
       );
-      if (pickedFile != null) {
-        final File imageFile = File(pickedFile.path);
-        setState(() => _image = imageFile);
-        await _uploadProfileImage(imageFile);
-      }
+      if (pickedFile == null) return;
+
+      final File? croppedFile = await _cropProfileImage(pickedFile.path);
+      if (croppedFile == null) return;
+
+      setState(() => _image = croppedFile);
+      await _uploadProfileImage(croppedFile);
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
+  }
+
+  Future<File?> _cropProfileImage(String sourcePath) async {
+    final Color primary = Theme.of(context).colorScheme.primary;
+    final CroppedFile? cropped = await ImageCropper().cropImage(
+      sourcePath: sourcePath,
+      compressFormat: ImageCompressFormat.jpg,
+      compressQuality: 90,
+      maxWidth: 1000,
+      maxHeight: 1000,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: AppStrings.tr('crop_profile_photo'),
+          toolbarColor: primary,
+          toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: primary,
+          cropStyle: CropStyle.circle,
+          lockAspectRatio: true,
+          hideBottomControls: false,
+        ),
+        IOSUiSettings(
+          title: AppStrings.tr('crop_profile_photo'),
+          cropStyle: CropStyle.circle,
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+          aspectRatioPickerButtonHidden: true,
+        ),
+      ],
+    );
+    if (cropped == null) return null;
+    return File(cropped.path);
   }
 
   Future<void> _uploadProfileImage(File imageFile) async {
@@ -610,18 +519,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           (value) => ThemeManager().toggleTheme(value),
                         ),
                         _buildDivider(context),
-                        _buildToggleRow(
-                          context,
-                          Icons.notifications_active_rounded,
-                          AppStrings.tr('notification_label'),
-                          Colors.orange,
-                          _isNotificationEnabled,
-                          _isSavingNotification
-                              ? null
-                              : _handleNotificationChange,
-                          isLoading: _isSavingNotification,
-                        ),
-                        _buildDivider(context),
                         _buildLanguageRow(context),
                       ]),
                       const SizedBox(height: 22),
@@ -633,6 +530,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           AppStrings.tr('edit_profile_action'),
                           Theme.of(context).colorScheme.primary,
                           onTap: _showEditProfileSheet,
+                        ),
+                        _buildDivider(context),
+                        _buildNavRow(
+                          context,
+                          Icons.face_retouching_natural_rounded,
+                          AppStrings.tr('update_face_action'),
+                          Colors.teal,
+                          onTap: () => UpdateFaceFlowController.start(
+                            context,
+                            loginData: widget.loginData,
+                          ),
                         ),
                         _buildDivider(context),
                         _buildNavRow(

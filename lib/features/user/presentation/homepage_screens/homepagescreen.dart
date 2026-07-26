@@ -5,6 +5,7 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/logic/homepage_logic.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/home_page_skeleton_loading.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/invite_mail_button.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class HomePageScreen extends StatefulWidget {
@@ -630,41 +631,6 @@ class _HomePageScreenState extends HomePageLogic {
                       ),
                     ),
                   ),
-
-                Positioned(
-                  top: 50,
-                  right: 16,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      final result = await Navigator.pushNamed(
-                        context,
-                        AppRoute.registerFace,
-                        arguments: widget.loginData,
-                      );
-                      if (result == true && mounted) {
-                        setState(() {});
-                      }
-                    },
-                    icon: const Icon(Icons.face_retouching_natural, size: 18),
-                    label: const Text('Update Face'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 2,
-                      minimumSize: const Size(0, 32), // Match chip height
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          30,
-                        ), // Same rounded style
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1073,41 +1039,7 @@ class _HomePageScreenState extends HomePageLogic {
             onPressed: widget.onSwitchWorkspace,
             icon: const Icon(Icons.home_work_sharp),
           ),
-        StreamBuilder<List<Map<String, dynamic>>>(
-          stream: watchUserNotificationItems(),
-          builder: (context, snapshot) {
-            final List<Map<String, dynamic>> notifications =
-                snapshot.data ?? const <Map<String, dynamic>>[];
-            final bool showDot = shouldShowNotificationDot(notifications);
-
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.pushNamed(
-                    context,
-                    AppRoute.notificationScreen,
-                    arguments: widget.loginData,
-                  ),
-                  icon: const Icon(Icons.notifications_none_rounded),
-                ).animate().shake(delay: 1.seconds, duration: 500.ms),
-                if (showDot)
-                  Positioned(
-                    top: 14,
-                    right: 14,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
+        InviteMailButton(loginData: widget.loginData),
         const SizedBox(width: 8),
       ],
     );

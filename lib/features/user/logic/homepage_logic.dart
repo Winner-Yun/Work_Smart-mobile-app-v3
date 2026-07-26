@@ -12,30 +12,25 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/map_styles.dart';
 import 'package:flutter_worksmart_app/core/util/database/attendance_data.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/core/util/database/office_data.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/face_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/geofence_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/notification_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/policy_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/workspace_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/face_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/geofence_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/notification_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/policy_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
+import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/face_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/geofence_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/workspace_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/attendance_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/face_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/geofence_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -66,8 +61,6 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
   late final WorkspaceRepository _workspaceRepo;
 
   late final FaceRepository _faceRepo; // Add Face Repo
-
-  late final NotificationRepository _notificationRepo;
 
   late final AttendanceRepository _attendanceRepo;
 
@@ -100,17 +93,9 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
   // --- Data Models ---
   late UserModel currentUser;
 
-  late List<UserModel> allEmployees;
-
   late String? loggedInUserId;
 
-  final List<Map<String, dynamic>> _userRecordsData = usersFinalData
-      .map((item) => Map<String, dynamic>.from(item))
-      .toList();
-
-  final Map<String, dynamic> _officeConfigData = Map<String, dynamic>.from(
-    officeMasterData,
-  );
+  final Map<String, dynamic> _officeConfigData = <String, dynamic>{};
 
   final Map<String, dynamic> _currentFaceBiometricsData = <String, dynamic>{};
 
@@ -198,25 +183,6 @@ abstract class HomePageLogic extends _HomePageLogicState
         _FaceEmbeddingMixin,
         _AttendanceScanMixin,
         _DataLoadingMixin {
-  Stream<List<Map<String, dynamic>>> watchUserNotificationItems() {
-    final String uid = (loggedInUserId ?? '').toString().trim();
-    if (uid.isEmpty) {
-      return Stream<List<Map<String, dynamic>>>.value(
-        const <Map<String, dynamic>>[],
-      );
-    }
-    return _notificationRepo.watchUserNotifications(uid);
-  }
-
-  bool shouldShowNotificationDot(List<Map<String, dynamic>> notifications) {
-    return notifications.any((item) {
-      final raw = item['isRead'] ?? item['is_read'];
-      if (raw is bool) return raw == false;
-      final normalized = (raw ?? '').toString().trim().toLowerCase();
-      return normalized == 'false' || normalized == '0' || normalized == 'no';
-    });
-  }
-
   @override
   void initState() {
     super.initState();
@@ -224,7 +190,6 @@ abstract class HomePageLogic extends _HomePageLogicState
     _policyRepo = PolicyRepository(PolicyService());
     _workspaceRepo = WorkspaceRepository(WorkspaceService());
     _faceRepo = FaceRepository(FaceService());
-    _notificationRepo = NotificationRepository(NotificationService());
     _attendanceRepo = AttendanceRepository(AttendanceService());
     loggedInUserId = widget.loginData?['uid'];
     _loadAllData();

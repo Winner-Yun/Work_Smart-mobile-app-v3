@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/invite_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/invite_service.dart';
 import 'package:flutter_worksmart_app/shared/model/invite_action_response.dart';
 import 'package:flutter_worksmart_app/shared/model/invite_model.dart';
 

@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/workspace_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
+import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/workspace_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/workspace_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';

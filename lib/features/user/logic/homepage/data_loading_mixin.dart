@@ -28,30 +28,8 @@ mixin _DataLoadingMixin
   }
 
   Future<void> _loadData() async {
-    final userDataSource = _userRecordsData.isNotEmpty
-        ? _userRecordsData
-        : usersFinalData;
-
-    final safeUserDataSource = userDataSource.isNotEmpty
-        ? userDataSource
-        : <Map<String, dynamic>>[defaultUserRecord];
-
-    final currentUserData = safeUserDataSource.firstWhere(
-      (user) => user['uid'] == loggedInUserId,
-      orElse: () => safeUserDataSource.first,
-    );
-
-    final String staticUserName =
-        (currentUserData['display_name'] ?? currentUserData['name'])
-            ?.toString() ??
-        '';
-    Map<String, dynamic>? effectiveUserData = currentUserData;
-    if (staticUserName.trim().isEmpty) {
-      final cachedProfile = await _loadCachedUserProfile();
-      if (cachedProfile != null) {
-        effectiveUserData = cachedProfile;
-      }
-    }
+    final Map<String, dynamic> effectiveUserData =
+        await _loadCachedUserProfile() ?? <String, dynamic>{};
 
     currentUser = UserModel.fromJson(effectiveUserData);
     final Map<String, dynamic> faceData = _currentFaceBiometricsData;
@@ -72,10 +50,6 @@ mixin _DataLoadingMixin
         : (normalizedFaceStatus == 'pending' && hasFaceSamples
               ? 'approved'
               : normalizedFaceStatus);
-
-    allEmployees = safeUserDataSource
-        .map((json) => UserModel.fromJson(json))
-        .toList();
 
     officeLocation = _resolveOfficeLocation();
 
@@ -398,41 +372,7 @@ mixin _DataLoadingMixin
   }
 
   // --- Getters for UI Consumption ---
-  String _getDisplayFirstName(String? fullName) {
-    if (fullName == null) return '';
-    final parts = fullName
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return '';
-    return parts.first;
-  }
-
   String get currentUserDisplayName => currentUser.name;
-
-  List<Map<String, dynamic>> get employeeListDisplayData {
-    final sortedEmployees = List<UserProfile>.from(allEmployees)
-      ..sort((a, b) {
-        final scoreA = a.achievements.performanceScore;
-        final scoreB = b.achievements.performanceScore;
-        return scoreB.compareTo(scoreA);
-      });
-
-    return List.generate(sortedEmployees.length, (index) {
-      final user = sortedEmployees[index];
-      final rank = index + 1;
-
-      return {
-        "name": _getDisplayFirstName(user.displayName),
-        "role": user.roleTitle,
-        "score":
-            "${user.achievements.performanceScore} ${AppStrings.tr('points_label')}",
-        "imgUrl": user.profileUrl,
-        "isTop": rank < 2,
-      };
-    });
-  }
 
   List<Map<String, dynamic>> get leaveStatisticsData {
     final policy =

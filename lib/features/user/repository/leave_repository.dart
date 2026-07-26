@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 
 class LeaveRepository {

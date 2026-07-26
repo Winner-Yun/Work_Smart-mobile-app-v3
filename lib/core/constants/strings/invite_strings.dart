@@ -1,0 +1,36 @@
+/// Invite strings
+const Map<String, String> inviteStringsEn = {
+  'invites_title': 'My Invites',
+  'invites_empty': 'No pending invites',
+  'invites_load_failed': 'Failed to load invites',
+  'invite_position_label': 'Position',
+  'invite_role_label': 'Role',
+  'invite_expires_label': 'Expires',
+  'accept_button': 'Accept',
+  'reject_button': 'Reject',
+  'invite_accept_success': 'Invite accepted',
+  'invite_reject_success': 'Invite rejected',
+  'invite_action_failed': 'Action failed',
+  'confirm_reject_invite_title': 'Reject Invite?',
+  'confirm_reject_invite_msg': 'Are you sure you want to reject this invite?',
+  'search_invites_hint': 'Search invites...',
+  'no_invites_matching': 'No invites matching',
+};
+
+const Map<String, String> inviteStringsKm = {
+  'invites_title': 'ការអញ្ជើញរបស់ខ្ញុំ',
+  'invites_empty': 'មិនមានការអញ្ជើញរង់ចាំទេ',
+  'invites_load_failed': 'មិនអាចផ្ទុកការអញ្ជើញបានទេ',
+  'invite_position_label': 'តួនាទី',
+  'invite_role_label': 'តួនាទីប្រព័ន្ធ',
+  'invite_expires_label': 'ផុតកំណត់',
+  'accept_button': 'យល់ព្រម',
+  'reject_button': 'បដិសេធ',
+  'invite_accept_success': 'ការអញ្ជើញត្រូវបានទទួលយក',
+  'invite_reject_success': 'ការអញ្ជើញត្រូវបានបដិសេធ',
+  'invite_action_failed': 'ការធ្វើសកម្មភាពបានបរាជ័យ',
+  'confirm_reject_invite_title': 'បដិសេធការអញ្ជើញ?',
+  'confirm_reject_invite_msg': 'តើអ្នកប្រាកដជាចង់បដិសេធការអញ្ជើញនេះមែនទេ?',
+  'search_invites_hint': 'ស្វែងរកការអញ្ជើញ...',
+  'no_invites_matching': 'រកមិនឃើញការអញ្ជើញដែលត្រូវនឹង',
+};

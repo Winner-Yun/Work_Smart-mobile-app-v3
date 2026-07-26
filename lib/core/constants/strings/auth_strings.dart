@@ -12,6 +12,8 @@ const Map<String, String> authStringsEn = {
   'developer_mode_alert_title': 'Developer Mode Detected',
   'developer_mode_alert_message': 'Developer mode is enabled on your device. For security, please disable developer mode to use this app.',
   'exit_app': 'Exit App',
+  'connecting_google_title': 'Connecting to Google...',
+  'connecting_google_subtitle': 'Please complete sign-in to continue',
 };
 
 const Map<String, String> authStringsKm = {
@@ -27,4 +29,6 @@ const Map<String, String> authStringsKm = {
   'developer_mode_alert_title': 'Developer Mode Detected',
   'developer_mode_alert_message': 'Developer mode ត្រូវបានបើកលើឧបករណ៍របស់អ្នក។ ដើម្បីសុវត្ថិភាព សូមបិទវា មុនប្រើកម្មវិធីនេះ។',
   'exit_app': 'ចាកចេញពីកម្មវិធី',
+  'connecting_google_title': 'កំពុងភ្ជាប់ទៅ Google...',
+  'connecting_google_subtitle': 'សូមបំពេញការចូលគណនីដើម្បីបន្ត',
 };

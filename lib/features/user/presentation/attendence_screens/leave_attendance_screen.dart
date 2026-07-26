@@ -6,11 +6,10 @@ import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/leave_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/policy_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/policy_service.dart';
+import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_all_requests_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
@@ -57,10 +56,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
   late final ScrollController _scrollController;
 
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
-  // Still used for the notification bell stream on this screen (unrelated
-  // to leave data, which now comes from the REST LeaveRepository above).
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
 
   @override
   void initState() {
@@ -153,9 +148,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
   }
 
   void _applyPolicyLimits(Map<String, dynamic>? policyMap) {
-    final int? annualLimit = _readPositiveInt(
-      policyMap?['annual_leave_limit'],
-    );
+    final int? annualLimit = _readPositiveInt(policyMap?['annual_leave_limit']);
     final int? sickLimit = _readPositiveInt(policyMap?['sick_leave_limit']);
     if (annualLimit != null) _annualTotal = annualLimit;
     if (sickLimit != null) _sickTotal = sickLimit;
@@ -379,19 +372,22 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
               children: [
                 // FIXED TOP SECTION
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSummarySection(context),
-                      const SizedBox(height: 30),
-                      _buildListHeader(context),
-                    ],
-                  ),
-                ).animate().fadeIn(duration: 260.ms).slideY(begin: -0.04, end: 0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSummarySection(context),
+                          const SizedBox(height: 30),
+                          _buildListHeader(context),
+                        ],
+                      ),
+                    )
+                    .animate()
+                    .fadeIn(duration: 260.ms)
+                    .slideY(begin: -0.04, end: 0),
 
                 // SCROLLABLE LIST SECTION
                 Expanded(
@@ -409,9 +405,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
                               hasScrollBody: false,
                               child: Padding(
                                 padding: EdgeInsets.only(
-                                  top:
-                                      MediaQuery.of(context).size.height *
-                                      0.1,
+                                  top: MediaQuery.of(context).size.height * 0.1,
                                 ),
                                 child: _buildEmptyState(context),
                               ),
@@ -546,82 +540,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
           fontSize: 22,
           fontWeight: FontWeight.bold,
         ),
-      ),
-      actions: [
-        IconButton(
-          onPressed: () => Navigator.pushNamed(
-            context,
-            AppRoute.notificationScreen,
-            arguments: loginData,
-          ),
-          icon: _buildNotificationBell(context),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNotificationBell(BuildContext context) {
-    final String uid = (loginData?['uid'] ?? '').toString().trim();
-    if (uid.isEmpty) {
-      return _buildNotificationBellContent(context, showDot: false);
-    }
-
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _realtimeDataController.watchUserNotifications(uid),
-      builder: (context, snapshot) {
-        final notifications = snapshot.data ?? const <Map<String, dynamic>>[];
-
-        final bool hasUnreadNotifications = notifications.any((item) {
-          final raw = item['isRead'] ?? item['is_read'];
-          if (raw is bool) return raw == false;
-
-          final normalized = (raw ?? '').toString().trim().toLowerCase();
-          return normalized == 'false' ||
-              normalized == '0' ||
-              normalized == 'no';
-        });
-
-        return _buildNotificationBellContent(
-          context,
-          showDot: hasUnreadNotifications,
-        );
-      },
-    );
-  }
-
-  Widget _buildNotificationBellContent(
-    BuildContext context, {
-    required bool showDot,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Icon(
-            Icons.notifications_none,
-            color: Theme.of(context).iconTheme.color,
-          ),
-          if (showDot)
-            Positioned(
-              right: 2,
-              top: 2,
-              child: Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

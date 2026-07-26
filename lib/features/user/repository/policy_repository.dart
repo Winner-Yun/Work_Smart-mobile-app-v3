@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/policy_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 
 class PolicyRepository {

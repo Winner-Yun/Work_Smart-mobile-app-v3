@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/features/user/logic/workspace_screen_logic.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/invite_mail_button.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -238,39 +238,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
           ),
         ],
       ),
-      actions: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            IconButton(
-              icon: Icon(
-                Icons.notifications_none_rounded,
-                color: theme.iconTheme.color,
-              ),
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  AppRoute.notificationScreen,
-                  arguments: widget.loginData,
-                );
-              },
-            ),
-            Positioned(
-              top: 14,
-              right: 14,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 8),
-      ],
+      actions: [InviteMailButton(loginData: widget.loginData)],
     );
   }
 

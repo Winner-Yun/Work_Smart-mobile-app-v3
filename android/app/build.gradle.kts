@@ -5,8 +5,6 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // Add the Google services Gradle plugin
-    id("com.google.gms.google-services")
 }
 
 fun loadEnvValue(name: String): String {
@@ -31,17 +29,8 @@ fun loadEnvValue(name: String): String {
 }
 
 dependencies {
-    // Import the Firebase BoM
-    implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
-
-    // Add Firebase Analytics
-    implementation("com.google.firebase:firebase-analytics")
-
     // Required by flutter_local_notifications for newer Java time APIs.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-
-    // Add other Firebase products here as needed
-    // https://firebase.google.com/docs/android/setup#available-libraries
 }
 
 flutter {

@@ -1,4 +1,4 @@
-import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 
 class UserRepository {

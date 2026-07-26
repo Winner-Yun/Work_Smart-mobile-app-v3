@@ -5,12 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
-import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/attendance_record.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/attendance_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
+import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
+import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -29,16 +30,14 @@ class AttendanceCalendarScreen extends StatefulWidget {
 }
 
 class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
-  late UserProfile _currentUser;
-  List<AttendanceRecord> _userAttendanceRecords = [];
+  late UserModel _currentUser;
+  List<AttendanceModel> _userAttendanceRecords = [];
   late String? loggedInUserId;
 
   late int _selectedDay;
   late DateTime _currentViewDate;
   bool _isLoading = true;
   bool _isDownloading = false;
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
   final AttendanceRepository _attendanceRepo = AttendanceRepository(
     AttendanceService(),
   );
@@ -62,42 +61,31 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
         .trim();
   }
 
+  /// REST profile, falling back to the local cache if the network call fails.
+  Future<UserModel> _resolveCurrentUser() async {
+    try {
+      return await UserRepository(UserService()).getUserProfile();
+    } catch (_) {
+      final cached = await DatabaseHelper().getUserProfile();
+      return UserModel.fromJson(cached ?? const <String, dynamic>{});
+    }
+  }
+
   Future<void> _loadData() async {
     try {
-      final users = await _realtimeDataController.fetchUserRecords();
-
-      final currentUserData = users.firstWhere(
-        (user) =>
-            (user['uid'] ?? user['user_id'] ?? user['userId'])
-                ?.toString()
-                .trim() ==
-            loggedInUserId,
-        orElse: () => defaultUserRecord,
-      );
-
-      _currentUser = UserProfile.fromJson(currentUserData);
+      _currentUser = await _resolveCurrentUser();
 
       final prefs = await SharedPreferences.getInstance();
       final workspaceId = prefs.getString('selected_workspace_id') ?? '';
 
-      final attendanceRecords = workspaceId.isEmpty
-          ? <Map<String, dynamic>>[]
-          : (await _attendanceRepo.getMyAttendance(
+      _userAttendanceRecords = workspaceId.isEmpty
+          ? <AttendanceModel>[]
+          : await _attendanceRepo.getMyAttendance(
               workspaceId,
               sortBy: 'date',
               sortOrder: 'desc',
               limit: 500,
-            ))
-                .map((record) {
-                  final map = record.toLegacyMap();
-                  map['uid'] = _currentUser.uid;
-                  return map;
-                })
-                .toList();
-
-      _userAttendanceRecords = attendanceRecords
-          .map((json) => AttendanceRecord.fromJson(json))
-          .toList();
+            );
 
       if (!mounted) return;
       setState(() {
@@ -181,12 +169,9 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
                       ),
                     ),
                     pw.SizedBox(height: 8),
-                    pw.Text('User ID: ${_currentUser.uid}'),
+                    pw.Text('User ID: ${_currentUser.id}'),
                     pw.Text(
-                      'Name: ${_currentUser.displayName.isNotEmpty ? _currentUser.displayName : '-'}',
-                    ),
-                    pw.Text(
-                      'Role: ${_currentUser.roleTitle.isNotEmpty ? _currentUser.roleTitle : '-'}',
+                      'Name: ${_currentUser.name.isNotEmpty ? _currentUser.name : '-'}',
                     ),
                     pw.Text('Month: $monthLabel'),
                   ],
@@ -304,7 +289,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
 
       final Uint8List bytes = await pdf.save();
       final fileName =
-          'attendance_proof_${_currentUser.uid}_${DateFormat('yyyy_MM').format(_currentViewDate)}.pdf';
+          'attendance_proof_${_currentUser.id}_${DateFormat('yyyy_MM').format(_currentViewDate)}.pdf';
 
       // Save to temporary directory
       final tempDir = await getTemporaryDirectory();
