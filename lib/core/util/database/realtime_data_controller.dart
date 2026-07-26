@@ -11,7 +11,6 @@ class RealtimeDataController {
   static const String _legacyUsersCollection = 'user_records';
   static const String _officeCollection = 'office_connections';
   static const String _attendanceCollection = 'attendance_records';
-  static const String _leaveRecordsSubCollection = 'leave_records';
   static const String _notificationsSubCollection = 'notifications';
   static const String _defaultOfficeId = 'office_1777372932913';
   static const String _passwordAlgorithmV1 = 'sha256-v1';
@@ -173,23 +172,20 @@ class RealtimeDataController {
     await _migrateLegacyUsersIfNeeded();
 
     final snapshot = await _firestore.collection(_usersCollection).get();
-    final records = snapshot.docs
+    return snapshot.docs
         .map((doc) => _normalizeUserRecord(doc.id, doc.data()))
         .toList();
-
-    return Future.wait(records.map(_hydrateUserRecordWithLeaveRecords));
   }
 
   Stream<List<Map<String, dynamic>>> watchUserRecords() async* {
     await _migrateLegacyUsersIfNeeded();
 
-    yield* _firestore.collection(_usersCollection).snapshots().asyncMap((
+    yield* _firestore.collection(_usersCollection).snapshots().map((
       snapshot,
-    ) async {
-      final records = snapshot.docs
+    ) {
+      return snapshot.docs
           .map((doc) => _normalizeUserRecord(doc.id, doc.data()))
           .toList();
-      return Future.wait(records.map(_hydrateUserRecordWithLeaveRecords));
     });
   }
 
@@ -257,180 +253,6 @@ class RealtimeDataController {
         .toList();
   }
 
-  Stream<List<Map<String, dynamic>>> watchAttendanceRecords({String? uid}) {
-    Query<Map<String, dynamic>> query = _firestore.collection(
-      _attendanceCollection,
-    );
-    final normalizedUid = uid?.trim();
-    if (normalizedUid != null && normalizedUid.isNotEmpty) {
-      query = query.where('uid', isEqualTo: normalizedUid);
-    }
-
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => _normalizeAttendanceRecord(doc.id, doc.data()))
-          .toList();
-    });
-  }
-
-  Future<Map<String, dynamic>> saveAttendanceScan({
-    required String uid,
-    required String scanType,
-    DateTime? scannedAt,
-    Map<String, dynamic>? latLng,
-    Map<String, dynamic>? verification,
-  }) async {
-    final String userId = uid.trim();
-    if (userId.isEmpty) {
-      throw ArgumentError('uid is required');
-    }
-
-    final String normalizedScanType =
-        scanType.trim().toLowerCase() == 'check_out' ? 'check_out' : 'check_in';
-    final DateTime eventAt = scannedAt ?? DateTime.now();
-    Map<String, dynamic> officePolicy = <String, dynamic>{};
-    try {
-      officePolicy = await _readOfficePolicyForUser(userId);
-    } catch (_) {
-      officePolicy = <String, dynamic>{};
-    }
-    final String policyCheckInStart =
-        _readNonEmptyString(
-          officePolicy['check_in_start'] ?? officePolicy['checkInStart'],
-        ) ??
-        '';
-    final int policyLateBufferMinutes = _parseNonNegativeInt(
-      officePolicy['late_buffer_minutes'] ?? officePolicy['lateBufferMinutes'],
-      fallback: 0,
-    );
-    final String dateKey = _formatDateKey(eventAt);
-    final String recordId = '${userId}_$dateKey';
-    final DocumentReference<Map<String, dynamic>> docRef = _firestore
-        .collection(_attendanceCollection)
-        .doc(recordId);
-
-    return _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(docRef);
-      final Map<String, dynamic> existing =
-          snapshot.data() ?? <String, dynamic>{};
-
-      String checkIn = (existing['check_in'] ?? '--:--').toString();
-      String checkOut = (existing['check_out'] ?? '--:--').toString();
-      final String scanTime = _format12HourTime(eventAt);
-
-      if (normalizedScanType == 'check_in') {
-        if (!_isAttendanceTimeSet(checkIn)) {
-          checkIn = scanTime;
-        }
-      } else {
-        checkOut = scanTime;
-        if (!_isAttendanceTimeSet(checkIn)) {
-          checkIn = scanTime;
-        }
-      }
-
-      final double totalHours = _calculateAttendanceHours(checkIn, checkOut);
-      final String status = _resolveAttendanceStatus(
-        existingStatus: existing['status']?.toString(),
-        checkInTime: checkIn,
-        policyCheckInStart: policyCheckInStart,
-        lateBufferMinutes: policyLateBufferMinutes,
-      );
-
-      final Map<String, dynamic> record = <String, dynamic>{
-        'uid': userId,
-        'date': dateKey,
-        'check_in': checkIn,
-        'check_out': checkOut,
-        'total_hours': totalHours,
-        'status': status,
-        'lat_lng': _normalizeLatLng(latLng),
-        if (verification != null && verification.isNotEmpty)
-          'verification': verification,
-      };
-
-      transaction.set(docRef, record, SetOptions(merge: true));
-      return record;
-    });
-  }
-
-  Future<Map<String, dynamic>> saveAbsentAttendanceIfNotScanned({
-    required String uid,
-    DateTime? forDate,
-  }) async {
-    final String userId = uid.trim();
-    if (userId.isEmpty) {
-      throw ArgumentError('uid is required');
-    }
-
-    final DateTime targetDate = forDate ?? DateTime.now();
-    final String dateKey = _formatDateKey(targetDate);
-    final String recordId = '${userId}_$dateKey';
-    final DocumentReference<Map<String, dynamic>> docRef = _firestore
-        .collection(_attendanceCollection)
-        .doc(recordId);
-
-    return _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(docRef);
-      final Map<String, dynamic> existing =
-          snapshot.data() ?? <String, dynamic>{};
-
-      final String checkIn = (existing['check_in'] ?? '--:--').toString();
-      final String checkOut = (existing['check_out'] ?? '--:--').toString();
-
-      final bool hasScannedAttendance =
-          _isAttendanceTimeSet(checkIn) || _isAttendanceTimeSet(checkOut);
-
-      if (hasScannedAttendance) {
-        return <String, dynamic>{
-          ...existing,
-          'uid': existing['uid'] ?? userId,
-          'date': existing['date'] ?? dateKey,
-          'check_in': checkIn,
-          'check_out': checkOut,
-        };
-      }
-
-      final Map<String, dynamic> record = <String, dynamic>{
-        'uid': userId,
-        'date': dateKey,
-        'check_in': '--:--',
-        'check_out': '--:--',
-        'total_hours': 0.0,
-        'status': 'absent',
-      };
-
-      transaction.set(docRef, record, SetOptions(merge: true));
-      return record;
-    });
-  }
-
-  Future<Map<String, dynamic>> _readOfficePolicyForUser(String userId) async {
-    final userDoc = await _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .get();
-    final Map<String, dynamic> userData = userDoc.data() ?? <String, dynamic>{};
-
-    final String officeId = _resolveOfficeId(
-      _readNonEmptyString(userData['office_id']) ??
-          _readNonEmptyString(userData['officeId']),
-    );
-
-    final officeDoc = await _firestore
-        .collection(_officeCollection)
-        .doc(officeId)
-        .get();
-    final Map<String, dynamic> officeData =
-        officeDoc.data() ?? <String, dynamic>{};
-
-    final dynamic rawPolicy = officeData['policy'];
-    if (rawPolicy is Map) {
-      return Map<String, dynamic>.from(rawPolicy);
-    }
-    return <String, dynamic>{};
-  }
-
   Future<Map<String, dynamic>?> authenticateUser({
     required String username,
     required String password,
@@ -492,18 +314,15 @@ class RealtimeDataController {
       return;
     }
 
-    yield* _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .snapshots()
-        .asyncMap((doc) async {
-          if (!doc.exists || doc.data() == null) {
-            return null;
-          }
+    yield* _firestore.collection(_usersCollection).doc(userId).snapshots().map((
+      doc,
+    ) {
+      if (!doc.exists || doc.data() == null) {
+        return null;
+      }
 
-          final record = _normalizeUserRecord(doc.id, doc.data()!);
-          return _hydrateUserRecordWithLeaveRecords(record);
-        });
+      return _normalizeUserRecord(doc.id, doc.data()!);
+    });
   }
 
   Future<Map<String, dynamic>?> fetchUserRecordById(String uid) async {
@@ -519,8 +338,7 @@ class RealtimeDataController {
       return null;
     }
 
-    final record = _normalizeUserRecord(doc.id, doc.data()!);
-    return _hydrateUserRecordWithLeaveRecords(record);
+    return _normalizeUserRecord(doc.id, doc.data()!);
   }
 
   Future<void> upsertUserRecord(Map<String, dynamic> userRecord) async {
@@ -591,84 +409,6 @@ class RealtimeDataController {
     }
 
     return Map<String, dynamic>.from(doc.data()!);
-  }
-
-  Future<void> upsertUserLeaveRecord(
-    String uid,
-    Map<String, dynamic> leaveRecord,
-  ) async {
-    await _migrateLegacyUsersIfNeeded();
-
-    final String userId = uid.trim();
-    final String requestId = (leaveRecord['request_id'] ?? '')
-        .toString()
-        .trim();
-    if (userId.isEmpty || requestId.isEmpty) return;
-
-    await _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .collection(_leaveRecordsSubCollection)
-        .doc(requestId)
-        .set(
-          _prepareLeaveRecordForWrite(requestId, leaveRecord),
-          SetOptions(merge: true),
-        );
-  }
-
-  Future<void> deleteUserLeaveRecord(String uid, String requestId) async {
-    await _migrateLegacyUsersIfNeeded();
-
-    final String userId = uid.trim();
-    final String normalizedRequestId = requestId.trim();
-    if (userId.isEmpty || normalizedRequestId.isEmpty) return;
-
-    await _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .collection(_leaveRecordsSubCollection)
-        .doc(normalizedRequestId)
-        .delete();
-  }
-
-  Future<List<Map<String, dynamic>>> fetchUserLeaveRecords(String uid) async {
-    await _migrateLegacyUsersIfNeeded();
-
-    final String userId = uid.trim();
-    if (userId.isEmpty) {
-      return <Map<String, dynamic>>[];
-    }
-
-    final snapshot = await _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .collection(_leaveRecordsSubCollection)
-        .get();
-
-    return snapshot.docs
-        .map((doc) => _normalizeLeaveRecord(doc.id, doc.data()))
-        .toList();
-  }
-
-  Stream<List<Map<String, dynamic>>> watchUserLeaveRecords(String uid) async* {
-    await _migrateLegacyUsersIfNeeded();
-
-    final String userId = uid.trim();
-    if (userId.isEmpty) {
-      yield <Map<String, dynamic>>[];
-      return;
-    }
-
-    yield* _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .collection(_leaveRecordsSubCollection)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => _normalizeLeaveRecord(doc.id, doc.data()))
-              .toList();
-        });
   }
 
   Future<void> deleteUserRecord(String uid) async {
@@ -897,82 +637,6 @@ class RealtimeDataController {
     return record;
   }
 
-  Map<String, dynamic> _prepareLeaveRecordForWrite(
-    String requestId,
-    Map<String, dynamic> source,
-  ) {
-    final Map<String, dynamic> record = _cloneMap(source);
-    record['request_id'] = requestId;
-    record['type'] = (record['type'] ?? '').toString();
-    record['start_date'] = (record['start_date'] ?? '').toString();
-    record['end_date'] = (record['end_date'] ?? '').toString();
-    record['reason'] = (record['reason'] ?? '').toString();
-    record['status'] = (record['status'] ?? 'pending').toString();
-
-    final String? attachmentUrl = _readNonEmptyString(record['attachment_url']);
-    if (attachmentUrl == null) {
-      record.remove('attachment_url');
-    } else {
-      record['attachment_url'] = attachmentUrl;
-    }
-
-    return record;
-  }
-
-  Map<String, dynamic> _normalizeLeaveRecord(
-    String docId,
-    Map<String, dynamic> source,
-  ) {
-    final Map<String, dynamic> record = _cloneMap(source);
-    record['request_id'] = (record['request_id'] ?? docId).toString();
-    record['type'] = (record['type'] ?? '').toString();
-    record['start_date'] = (record['start_date'] ?? '').toString();
-    record['end_date'] = (record['end_date'] ?? '').toString();
-    record['reason'] = (record['reason'] ?? '').toString();
-    record['status'] = (record['status'] ?? 'pending').toString();
-
-    final String? attachmentUrl = _readNonEmptyString(record['attachment_url']);
-    if (attachmentUrl == null) {
-      record.remove('attachment_url');
-    } else {
-      record['attachment_url'] = attachmentUrl;
-    }
-
-    return record;
-  }
-
-  Future<Map<String, dynamic>> _hydrateUserRecordWithLeaveRecords(
-    Map<String, dynamic> userRecord,
-  ) async {
-    final Map<String, dynamic> record = _cloneMap(userRecord);
-    final String userId = (record['uid'] ?? '').toString().trim();
-    if (userId.isEmpty) {
-      return record;
-    }
-
-    final QuerySnapshot<Map<String, dynamic>> leaveSnapshot = await _firestore
-        .collection(_usersCollection)
-        .doc(userId)
-        .collection(_leaveRecordsSubCollection)
-        .get();
-
-    if (leaveSnapshot.docs.isNotEmpty) {
-      record['leave_records'] = leaveSnapshot.docs
-          .map((doc) => _normalizeLeaveRecord(doc.id, doc.data()))
-          .toList();
-      return record;
-    }
-
-    final dynamic existingLeaveRecords = record['leave_records'];
-    if (existingLeaveRecords is List) {
-      record['leave_records'] = existingLeaveRecords
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
-    }
-
-    return record;
-  }
 
   Map<String, dynamic> _cloneMap(Map<String, dynamic> source) {
     return Map<String, dynamic>.from(source);
@@ -1108,136 +772,5 @@ class RealtimeDataController {
       mismatch |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
     }
     return mismatch == 0;
-  }
-
-  String _formatDateKey(DateTime dateTime) {
-    return '${dateTime.year}-'
-        '${dateTime.month.toString().padLeft(2, '0')}-'
-        '${dateTime.day.toString().padLeft(2, '0')}';
-  }
-
-  String _format12HourTime(DateTime dateTime) {
-    final int hour12 = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
-    final String minute = dateTime.minute.toString().padLeft(2, '0');
-    final String period = dateTime.hour >= 12 ? 'PM' : 'AM';
-    return '$hour12:$minute $period';
-  }
-
-  bool _isAttendanceTimeSet(String value) {
-    final String normalized = value.trim();
-    return normalized.isNotEmpty && normalized != '--:--';
-  }
-
-  double _calculateAttendanceHours(String checkIn, String checkOut) {
-    final DateTime? inTime = _parse12HourTime(checkIn);
-    final DateTime? outTime = _parse12HourTime(checkOut);
-    if (inTime == null || outTime == null) {
-      return 0.0;
-    }
-
-    Duration diff = outTime.difference(inTime);
-    if (diff.isNegative) {
-      diff = const Duration();
-    }
-
-    return double.parse((diff.inMinutes / 60).toStringAsFixed(1));
-  }
-
-  DateTime? _parse12HourTime(String value) {
-    final String normalized = value.trim();
-    if (normalized.isEmpty || normalized == '--:--') {
-      return null;
-    }
-
-    final RegExp twentyFourHour = RegExp('^([01]?\\d|2[0-3]):([0-5]\\d)\$');
-    final RegExpMatch? twentyFourMatch = twentyFourHour.firstMatch(normalized);
-    if (twentyFourMatch != null) {
-      final int hour = int.parse(twentyFourMatch.group(1)!);
-      final int minute = int.parse(twentyFourMatch.group(2)!);
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day, hour, minute);
-    }
-
-    try {
-      final List<String> parts = normalized.split(' ');
-      if (parts.length != 2) return null;
-
-      final List<String> hm = parts[0].split(':');
-      if (hm.length != 2) return null;
-
-      int hour = int.parse(hm[0]);
-      final int minute = int.parse(hm[1]);
-      final String period = parts[1].toUpperCase();
-
-      if (period == 'PM' && hour < 12) hour += 12;
-      if (period == 'AM' && hour == 12) hour = 0;
-
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day, hour, minute);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _resolveAttendanceStatus({
-    required String? existingStatus,
-    required String checkInTime,
-    required String policyCheckInStart,
-    required int lateBufferMinutes,
-  }) {
-    final String normalizedExisting = (existingStatus ?? '')
-        .trim()
-        .toLowerCase();
-    if (normalizedExisting == 'late' || normalizedExisting == 'on_time') {
-      return normalizedExisting;
-    }
-
-    final DateTime? checkInAt = _parse12HourTime(checkInTime);
-    final DateTime? policyStartAt = _parse12HourTime(policyCheckInStart);
-    if (checkInAt == null || policyStartAt == null) {
-      return 'on_time';
-    }
-
-    final int normalizedLateBufferMinutes = lateBufferMinutes >= 0
-        ? lateBufferMinutes
-        : 0;
-    final DateTime lateThreshold = policyStartAt.add(
-      Duration(minutes: normalizedLateBufferMinutes),
-    );
-    if (checkInAt.isAfter(lateThreshold)) {
-      return 'late';
-    }
-
-    return 'on_time';
-  }
-
-  int _parseNonNegativeInt(dynamic value, {int fallback = 0}) {
-    if (value is num) {
-      final int parsed = value.toInt();
-      return parsed >= 0 ? parsed : fallback;
-    }
-
-    if (value is String) {
-      final int? parsed = int.tryParse(value.trim());
-      if (parsed != null && parsed >= 0) {
-        return parsed;
-      }
-    }
-
-    return fallback;
-  }
-
-  Map<String, double> _normalizeLatLng(Map<String, dynamic>? latLng) {
-    final double lat = _asDouble(latLng?['lat']);
-    final double lng = _asDouble(latLng?['lng']);
-    return <String, double>{'lat': lat, 'lng': lng};
-  }
-
-  double _asDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    if (value is String) {
-      return double.tryParse(value) ?? 0.0;
-    }
-    return 0.0;
   }
 }

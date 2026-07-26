@@ -2,21 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/leave_record.dart';
+import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:intl/intl.dart';
 
 class LeaveDetailViewScreen extends StatefulWidget {
-  final LeaveRecord leave;
-  final String? userId;
+  final LeaveModel leave;
 
-  const LeaveDetailViewScreen({super.key, required this.leave, this.userId});
+  const LeaveDetailViewScreen({super.key, required this.leave});
 
   @override
   State<LeaveDetailViewScreen> createState() => _LeaveDetailViewScreenState();
 }
 
 class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
+  final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
   bool _isDeleting = false;
 
   @override
@@ -127,7 +129,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
     final bool removed = await LeaveRequestLogic.confirmAndDeleteLeave(
       context,
       record: widget.leave,
-      userId: widget.userId,
+      onDelete: () => _leaveRepo.deleteLeave(widget.leave.id),
     );
 
     if (!mounted) return;
@@ -145,7 +147,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
   Widget _buildStatusHeader(BuildContext context) {
     final statusColor = _getStatusColor(widget.leave.status);
     final statusKey = _getStatusKey(widget.leave.status);
-    final typeIcon = _getLeaveTypeIcon(widget.leave.type);
+    final typeIcon = _getLeaveTypeIcon(widget.leave.leaveType);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -177,7 +179,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  AppStrings.tr(widget.leave.type),
+                  AppStrings.tr(widget.leave.leaveType),
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodyLarge?.color,
                     fontWeight: FontWeight.w700,
@@ -751,7 +753,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
         widget.leave.attachmentUrl!.isNotEmpty;
     if (!hasAttachment) return false;
 
-    return widget.leave.type == 'sick_leave';
+    return widget.leave.leaveType == 'sick_leave';
   }
 
   String _getStatusKey(String status) {

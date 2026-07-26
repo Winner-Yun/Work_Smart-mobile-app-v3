@@ -1,5 +1,4 @@
 import 'package:flutter_worksmart_app/core/constants/default_profile_urls.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/leave_record.dart';
 
 import 'achievements.dart';
 import 'app_settings.dart';
@@ -17,7 +16,6 @@ class UserProfile {
   final String departmentId;
   final String gender;
   final Biometrics biometrics;
-  final List<LeaveRecord> leaveRecords;
   final TelegramAccount telegram;
   final Achievements achievements;
   final AppSettings appSettings;
@@ -34,7 +32,6 @@ class UserProfile {
     required this.gender,
     required this.biometrics,
     required this.telegram,
-    required this.leaveRecords,
     required this.achievements,
     required this.appSettings,
   });
@@ -69,11 +66,6 @@ class UserProfile {
       gender: gender,
       biometrics: Biometrics.fromJson(const <String, dynamic>{}),
       telegram: TelegramAccount.fromJson(json['telegram'] ?? {}),
-      leaveRecords:
-          (json['leave_records'] as List<dynamic>?)
-              ?.map((e) => LeaveRecord.fromJson(e))
-              .toList() ??
-          [],
       achievements: Achievements.fromJson(json['achievements'] ?? {}),
       appSettings: AppSettings.fromJson(
         appSettingsJson is Map<String, dynamic>

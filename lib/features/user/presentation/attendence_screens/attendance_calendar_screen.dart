@@ -7,6 +7,8 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/shared/model/activity_models/attendance_record.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AttendanceCalendarScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -36,6 +39,9 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
   bool _isDownloading = false;
   final RealtimeDataController _realtimeDataController =
       RealtimeDataController();
+  final AttendanceRepository _attendanceRepo = AttendanceRepository(
+    AttendanceService(),
+  );
 
   @override
   void initState() {
@@ -59,8 +65,6 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
   Future<void> _loadData() async {
     try {
       final users = await _realtimeDataController.fetchUserRecords();
-      final attendanceRecords = await _realtimeDataController
-          .fetchAttendanceRecords();
 
       final currentUserData = users.firstWhere(
         (user) =>
@@ -73,8 +77,25 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
 
       _currentUser = UserProfile.fromJson(currentUserData);
 
+      final prefs = await SharedPreferences.getInstance();
+      final workspaceId = prefs.getString('selected_workspace_id') ?? '';
+
+      final attendanceRecords = workspaceId.isEmpty
+          ? <Map<String, dynamic>>[]
+          : (await _attendanceRepo.getMyAttendance(
+              workspaceId,
+              sortBy: 'date',
+              sortOrder: 'desc',
+              limit: 500,
+            ))
+                .map((record) {
+                  final map = record.toLegacyMap();
+                  map['uid'] = _currentUser.uid;
+                  return map;
+                })
+                .toList();
+
       _userAttendanceRecords = attendanceRecords
-          .where((record) => record['uid'] == _currentUser.uid)
           .map((json) => AttendanceRecord.fromJson(json))
           .toList();
 

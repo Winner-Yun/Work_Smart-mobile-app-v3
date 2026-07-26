@@ -25,4 +25,16 @@ class ApiEndpoints {
   // FACE
   static const String faceRegister = '/face/register';
   static const String faceMe = '/face/me';
+
+  // ATTENDANCE
+  static String attendanceCheckIn(String workspaceId) =>
+      '/attendance/$workspaceId/attendance/check-in';
+  static String attendanceCheckOut(String workspaceId) =>
+      '/attendance/$workspaceId/attendance/check-out';
+  static String attendanceMe(String workspaceId) =>
+      '/attendance/$workspaceId/me';
+
+  // LEAVE
+  static String createLeave(String workspaceId) => '/leave/$workspaceId/leave';
+  static String leaveById(String leaveId) => '/leave/$leaveId';
 }

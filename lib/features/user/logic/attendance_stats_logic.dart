@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/activity_models/attendance_record.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   late UserProfile currentUser;
@@ -17,6 +20,9 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   late int selectedYear;
   final RealtimeDataController _realtimeDataController =
       RealtimeDataController();
+  final AttendanceRepository _attendanceRepo = AttendanceRepository(
+    AttendanceService(),
+  );
   bool isLoading = true;
 
   final List<String> monthKeys = [
@@ -62,8 +68,6 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   Future<void> _loadData() async {
     try {
       final users = await _realtimeDataController.fetchUserRecords();
-      final attendanceRecords = await _realtimeDataController
-          .fetchAttendanceRecords();
 
       final currentUserData = users.firstWhere(
         (user) =>
@@ -76,8 +80,25 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
 
       currentUser = UserProfile.fromJson(currentUserData);
 
+      final prefs = await SharedPreferences.getInstance();
+      final workspaceId = prefs.getString('selected_workspace_id') ?? '';
+
+      final attendanceRecords = workspaceId.isEmpty
+          ? <Map<String, dynamic>>[]
+          : (await _attendanceRepo.getMyAttendance(
+              workspaceId,
+              sortBy: 'date',
+              sortOrder: 'desc',
+              limit: 500,
+            ))
+                .map((record) {
+                  final map = record.toLegacyMap();
+                  map['uid'] = currentUser.uid;
+                  return map;
+                })
+                .toList();
+
       userAttendanceRecords = attendanceRecords
-          .where((record) => record['uid'] == currentUser.uid)
           .map((json) => AttendanceRecord.fromJson(json))
           .toList();
 

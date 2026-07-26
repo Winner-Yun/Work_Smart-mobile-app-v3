@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
-import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
+import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SickLeaveRequestScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -23,19 +23,20 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
   static const int _sickLeaveTotal = 5;
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
   late final DateTime _selectedDate;
-  final CloudinaryProfileImageService _cloudinaryImageService =
-      CloudinaryProfileImageService();
-  late int _sickLeaveUsed;
-  late int _sickLeaveRemaining;
-  late UserProfile _currentUser;
+  final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
+
+  int _sickLeaveUsed = 0;
+  int _sickLeaveRemaining = _sickLeaveTotal;
+  List<LeaveModel> _myLeaves = <LeaveModel>[];
+  String? _workspaceId;
+  bool _isLoadingLeaves = true;
+
   late String? loggedInUserId;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _reasonController = TextEditingController();
 
   final ImagePicker _imagePicker = ImagePicker();
   XFile? _pickedFile;
-  String? _attachmentUrl;
-  bool _isUploadingAttachment = false;
   bool _showValidationErrors = false;
   bool _isSubmitting = false;
 
@@ -71,20 +72,34 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
         .trim();
   }
 
-  void _loadData() {
-    final currentUserData = usersFinalData.firstWhere(
-      (user) =>
-          (user['uid'] ?? user['user_id'] ?? user['userId'])
-              ?.toString()
-              .trim() ==
-          (loggedInUserId ?? _resolveUserId()),
-      orElse: () => defaultUserRecord,
-    );
-    _currentUser = UserProfile.fromJson(currentUserData);
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
 
-    // Calculate sick leave used from leave records - sum actual days, not record count
-    final sickLeaves = _currentUser.leaveRecords
-        .where((leave) => leave.type.toLowerCase().contains('sick'))
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoadingLeaves = false);
+      return;
+    }
+
+    try {
+      final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
+      if (!mounted) return;
+      setState(() {
+        _myLeaves = leaves;
+        _recalculateQuota();
+        _isLoadingLeaves = false;
+      });
+    } catch (e) {
+      // The list endpoint is known to be unreliable right now, so fail
+      // open with an empty list rather than blocking the request form.
+      debugPrint('[SickLeaveRequestScreen] Failed to load leaves: $e');
+      if (mounted) setState(() => _isLoadingLeaves = false);
+    }
+  }
+
+  void _recalculateQuota() {
+    final sickLeaves = _myLeaves
+        .where((leave) => leave.leaveType.toLowerCase().contains('sick'))
         .toList();
     _sickLeaveUsed = sickLeaves.fold(
       0,
@@ -102,7 +117,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
   }
 
   Future<void> _pickImageFromSource(ImageSource source) async {
-    if (_isSubmitting || _isUploadingAttachment) return;
+    if (_isSubmitting) return;
 
     try {
       final XFile? file = await _imagePicker.pickImage(
@@ -125,54 +140,8 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
         return;
       }
 
-      final String filePath = file.path.trim();
-      if (filePath.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppStrings.tr('leave_request_submit_failed'),
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      final String userId = _resolveUserId().isNotEmpty
-          ? _resolveUserId()
-          : _currentUser.uid.trim();
-      if (userId.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppStrings.tr('unable_to_resolve_user_id'),
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      setState(() {
-        _isUploadingAttachment = true;
-      });
-
-      final String uploadedUrl = await _cloudinaryImageService
-          .uploadLeaveAttachment(
-            imageFile: File(filePath),
-            userId: userId,
-            previousImageUrl: _attachmentUrl,
-          );
-
-      if (!mounted) return;
-
       setState(() {
         _pickedFile = file;
-        _attachmentUrl = uploadedUrl;
       });
     } catch (e) {
       if (!mounted) return;
@@ -185,12 +154,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
           backgroundColor: Colors.red,
         ),
       );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploadingAttachment = false;
-        });
-      }
     }
   }
 
@@ -207,17 +170,14 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     });
 
     final isReasonValid = _formKey.currentState?.validate() ?? false;
-    final isDateValid = true;
-    final isFileValid = _attachmentUrl != null;
+    final isFileValid = _pickedFile != null;
 
-    if (!isReasonValid || !isDateValid || !isFileValid) {
+    if (!isReasonValid || !isFileValid) {
       return;
     }
 
-    final String userId = _resolveUserId().isNotEmpty
-        ? _resolveUserId()
-        : _currentUser.uid.trim();
-    if (userId.isEmpty) {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -234,14 +194,21 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       _isSubmitting = true;
     });
 
-    final bool submitted = await LeaveRequestLogic.submitLeaveRequest(
-      userId: userId,
-      type: 'sick_leave',
-      startDate: _selectedDate,
-      endDate: _selectedDate,
-      reason: _reasonController.text,
-      attachmentUrl: _attachmentUrl,
-    );
+    bool submitted = false;
+    try {
+      await _leaveRepo.createLeave(
+        workspaceId,
+        leaveType: 'sick_leave',
+        reason: _reasonController.text.trim(),
+        startDate: _selectedDate.toIso8601String(),
+        endDate: _selectedDate.toIso8601String(),
+        attachment: File(_pickedFile!.path),
+      );
+      submitted = true;
+    } catch (e) {
+      debugPrint('[SickLeaveRequestScreen] Submit failed: $e');
+      submitted = false;
+    }
 
     if (!mounted) return;
 
@@ -293,57 +260,59 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
-      body: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          autovalidateMode: _showValidationErrors
-              ? AutovalidateMode.always
-              : AutovalidateMode.disabled,
-          child: Column(
-            children: [
-              _buildTopInfoCard(context),
-              Padding(
-                padding: const EdgeInsets.all(20),
+      body: _isLoadingLeaves
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                autovalidateMode: _showValidationErrors
+                    ? AutovalidateMode.always
+                    : AutovalidateMode.disabled,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle(
-                      AppStrings.tr('request_details'),
-                      context,
+                    _buildTopInfoCard(context),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionTitle(
+                            AppStrings.tr('request_details'),
+                            context,
+                          ),
+                          const SizedBox(height: 15),
+                          _buildInputCard(context, [
+                            _buildLabel(
+                              AppStrings.tr('reason_for_sickness'),
+                              context,
+                            ),
+                            _buildTextField(
+                              context: context,
+                              hint: AppStrings.tr('sickness_reason_hint'),
+                              icon: Icons.edit_note,
+                              controller: _reasonController,
+                            ),
+                            const SizedBox(height: 20),
+                            _buildLabel(AppStrings.tr('leave_date'), context),
+                            _buildAutoSelectedDateField(context),
+                          ]),
+                          const SizedBox(height: 25),
+                          _buildSectionTitle(
+                            AppStrings.tr('medical_documents'),
+                            context,
+                          ),
+                          const SizedBox(height: 15),
+                          _buildUploadArea(context),
+                          const SizedBox(height: 40),
+                          _buildSubmitButton(context),
+                          const SizedBox(height: 20),
+                        ],
+                      ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1, end: 0),
                     ),
-                    const SizedBox(height: 15),
-                    _buildInputCard(context, [
-                      _buildLabel(
-                        AppStrings.tr('reason_for_sickness'),
-                        context,
-                      ),
-                      _buildTextField(
-                        context: context,
-                        hint: AppStrings.tr('sickness_reason_hint'),
-                        icon: Icons.edit_note,
-                        controller: _reasonController,
-                      ),
-                      const SizedBox(height: 20),
-                      _buildLabel(AppStrings.tr('leave_date'), context),
-                      _buildAutoSelectedDateField(context),
-                    ]),
-                    const SizedBox(height: 25),
-                    _buildSectionTitle(
-                      AppStrings.tr('medical_documents'),
-                      context,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildUploadArea(context),
-                    const SizedBox(height: 40),
-                    _buildSubmitButton(context),
-                    const SizedBox(height: 20),
                   ],
-                ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1, end: 0),
+                ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -550,10 +519,10 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
   }
 
   Widget _buildUploadArea(BuildContext context) {
-    final hasError = _showValidationErrors && _attachmentUrl == null;
+    final hasError = _showValidationErrors && _pickedFile == null;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    if (_attachmentUrl != null) {
+    if (_pickedFile != null) {
       // Show attached file state
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -590,39 +559,29 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
-                if (_isUploadingAttachment)
-                  const SizedBox(
-                    height: 40,
-                    width: 40,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.green),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildCardButton(
+                        context,
+                        Icons.camera_alt_outlined,
+                        'Camera',
+                        primaryColor,
+                        _pickFileFromCamera,
+                      ),
                     ),
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildCardButton(
-                          context,
-                          Icons.camera_alt_outlined,
-                          'Camera',
-                          primaryColor,
-                          _pickFileFromCamera,
-                        ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildCardButton(
+                        context,
+                        Icons.image_outlined,
+                        'Gallery',
+                        primaryColor,
+                        _pickFileFromGallery,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildCardButton(
-                          context,
-                          Icons.image_outlined,
-                          'Gallery',
-                          primaryColor,
-                          _pickFileFromGallery,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ).animate().scale(delay: 400.ms),
@@ -634,44 +593,31 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_isUploadingAttachment)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
-        else
-          Row(
-            children: [
-              Expanded(
-                child: _buildCardButton(
-                  context,
-                  Icons.image_outlined,
-                  'Gallery',
-                  primaryColor,
-                  _pickFileFromGallery,
-                  isError: hasError,
-                ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildCardButton(
+                context,
+                Icons.image_outlined,
+                'Gallery',
+                primaryColor,
+                _pickFileFromGallery,
+                isError: hasError,
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildCardButton(
-                  context,
-                  Icons.camera_alt_outlined,
-                  'Camera',
-                  primaryColor,
-                  _pickFileFromCamera,
-                  isError: hasError,
-                ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildCardButton(
+                context,
+                Icons.camera_alt_outlined,
+                'Camera',
+                primaryColor,
+                _pickFileFromCamera,
+                isError: hasError,
               ),
-            ],
-          ).animate().scale(delay: 300.ms),
+            ),
+          ],
+        ).animate().scale(delay: 300.ms),
         if (hasError)
           Padding(
             padding: const EdgeInsets.only(top: 12, left: 4),
@@ -755,8 +701,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
         ],
       ),
       child: ElevatedButton(
-        onPressed:
-            (_isSubmitting || _isUploadingAttachment || !_hasSickLeaveQuota)
+        onPressed: (_isSubmitting || !_hasSickLeaveQuota)
             ? null
             : _submitRequest,
         style: ElevatedButton.styleFrom(

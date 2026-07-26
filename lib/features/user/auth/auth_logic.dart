@@ -9,6 +9,16 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+enum GoogleReauthStatus { success, cancelled, emailMismatch, error }
+
+/// Result of [AuthLogic.reauthenticateForSensitiveAction].
+class GoogleReauthResult {
+  final GoogleReauthStatus status;
+  final String? email;
+
+  const GoogleReauthResult(this.status, {this.email});
+}
+
 class AuthLogic {
   final BuildContext context;
   final ApiClient _apiClient;
@@ -173,6 +183,44 @@ class AuthLogic {
       debugPrint('UNKNOWN EXCEPTION CAUGHT: $e');
       _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
       return false;
+    }
+  }
+
+  // ─────────── SENSITIVE-ACTION RE-AUTHENTICATION ───────────
+
+  /// Forces a fresh, interactive Google sign-in (bypassing any cached
+  /// silent session) and confirms it resolves to [expectedEmail]. Used to
+  /// prove "you currently hold this Google account" before a sensitive
+  /// action (e.g. updating the stored face embedding). This does NOT touch
+  /// the app's own session/JWT — it only verifies the Google identity.
+  Future<GoogleReauthResult> reauthenticateForSensitiveAction({
+    required String expectedEmail,
+  }) async {
+    try {
+      await _ensureGoogleSignInInitialized();
+
+      // Drop any cached Google session so authenticate() always prompts the
+      // account chooser instead of silently resolving to the last account.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+      final String signedInEmail = googleUser.email.trim().toLowerCase();
+      final String expected = expectedEmail.trim().toLowerCase();
+
+      if (expected.isNotEmpty && signedInEmail != expected) {
+        return const GoogleReauthResult(GoogleReauthStatus.emailMismatch);
+      }
+
+      return GoogleReauthResult(GoogleReauthStatus.success, email: signedInEmail);
+    } on GoogleSignInException catch (e) {
+      if (e.code == 'sign_in_canceled' || e.code == 'canceled') {
+        return const GoogleReauthResult(GoogleReauthStatus.cancelled);
+      }
+      return const GoogleReauthResult(GoogleReauthStatus.error);
+    } catch (_) {
+      return const GoogleReauthResult(GoogleReauthStatus.error);
     }
   }
 

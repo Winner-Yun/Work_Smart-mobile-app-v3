@@ -635,21 +635,18 @@ class _HomePageScreenState extends HomePageLogic {
                   top: 50,
                   right: 16,
                   child: ElevatedButton.icon(
-                    onPressed: isFaceEmbeddingUpdating
-                        ? null
-                        : () => _showUpdateFaceConfirmationDialog(context),
-                    icon: isFaceEmbeddingUpdating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.sync, size: 18),
-                    label: Icon(Icons.face),
-
+                    onPressed: () async {
+                      final result = await Navigator.pushNamed(
+                        context,
+                        AppRoute.registerFace,
+                        arguments: widget.loginData,
+                      );
+                      if (result == true && mounted) {
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.face_retouching_natural, size: 18),
+                    label: const Text('Update Face'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
@@ -803,6 +800,7 @@ class _HomePageScreenState extends HomePageLogic {
                               arguments: {
                                 ...?widget.loginData,
                                 'scanType': selectedAttendanceScanType,
+                                'workspace_id': currentWorkspace?.id,
                                 'lat_lng': {
                                   'lat': lastKnownPosition?.latitude ?? 0.0,
                                   'lng': lastKnownPosition?.longitude ?? 0.0,
@@ -1409,42 +1407,6 @@ class _HomePageScreenState extends HomePageLogic {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showUpdateFaceConfirmationDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Update Face Data',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Are you sure you want to pull the latest face embedding data from the server and replace your local vector?',
-          textAlign: TextAlign.center,
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              updateFaceEmbeddingVector(); // Calls logic to hit API & save locally
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Confirm'),
           ),
         ],
       ),

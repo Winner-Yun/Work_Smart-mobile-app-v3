@@ -44,7 +44,67 @@ class _LeaveManagementSkeletonLoadingState
 
         return Column(
           children: [
-            // Double overview card skeleton
+            // Double overview card skeleton — mirrors the tertiary-colored
+            // card with the two circular leave-progress rings, so it no
+            // longer shows real (stale/default) numbers while the policy
+            // and leave totals are still loading.
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.tertiary,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(30),
+                  bottomRight: Radius.circular(30),
+                ),
+              ),
+              padding: const EdgeInsets.only(
+                bottom: 30,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SkeletonCircularProgressItem(opacity: pulse),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 60,
+                        color: Colors.white24,
+                        margin: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      Expanded(
+                        child: _SkeletonCircularProgressItem(opacity: pulse),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      _SkeletonBox(
+                        width: 16,
+                        height: 16,
+                        color: Colors.white70,
+                        opacity: pulse,
+                        radius: 8,
+                      ),
+                      const SizedBox(width: 5),
+                      _SkeletonBox(
+                        width: 220,
+                        height: 11,
+                        color: Colors.white70,
+                        opacity: pulse,
+                        radius: 6,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // List header skeleton
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
               child: Column(
@@ -92,6 +152,54 @@ class _LeaveManagementSkeletonLoadingState
           ],
         );
       },
+    );
+  }
+}
+
+class _SkeletonCircularProgressItem extends StatelessWidget {
+  final double opacity;
+
+  const _SkeletonCircularProgressItem({required this.opacity});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Opacity(
+          opacity: opacity,
+          child: Container(
+            width: 55,
+            height: 55,
+            decoration: const BoxDecoration(
+              color: Colors.white24,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SkeletonBox(
+                width: 70,
+                height: 13,
+                color: Colors.white,
+                opacity: opacity,
+                radius: 6,
+              ),
+              const SizedBox(height: 6),
+              _SkeletonBox(
+                width: 90,
+                height: 11,
+                color: Colors.white70,
+                opacity: opacity,
+                radius: 6,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

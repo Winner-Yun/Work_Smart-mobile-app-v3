@@ -45,17 +45,38 @@ class _LeaveAttendanceSkeletonLoadingState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Summary section
+            // Summary section — mirrors the two leave-balance cards
+            // (annual/sick remaining) so they no longer flash real numbers
+            // while the policy is still loading.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    children: [
+                      Expanded(
+                        child: _SkeletonSummaryCard(
+                          color: animatedColor,
+                          opacity: pulse,
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: _SkeletonSummaryCard(
+                          color: animatedColor,
+                          opacity: pulse,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
+                  // List header — "Recent Requests" title + "View all" button
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _SkeletonBox(
-                        width: 120,
+                        width: 140,
                         height: 18,
                         color: animatedColor,
                         opacity: pulse,
@@ -93,6 +114,65 @@ class _LeaveAttendanceSkeletonLoadingState
           ],
         );
       },
+    );
+  }
+}
+
+class _SkeletonSummaryCard extends StatelessWidget {
+  final Color color;
+  final double opacity;
+
+  const _SkeletonSummaryCard({required this.color, required this.opacity});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SkeletonBox(
+            width: 36,
+            height: 36,
+            color: color,
+            opacity: opacity,
+            radius: 10,
+          ),
+          const SizedBox(height: 12),
+          _SkeletonBox(
+            width: 60,
+            height: 14,
+            color: color,
+            opacity: opacity,
+            radius: 6,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _SkeletonBox(
+                width: 34,
+                height: 24,
+                color: color,
+                opacity: opacity,
+                radius: 6,
+              ),
+              const SizedBox(width: 6),
+              _SkeletonBox(
+                width: 70,
+                height: 12,
+                color: color,
+                opacity: opacity,
+                radius: 6,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

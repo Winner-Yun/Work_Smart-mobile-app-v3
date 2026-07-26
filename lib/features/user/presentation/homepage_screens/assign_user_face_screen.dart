@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
@@ -262,24 +263,33 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
             const Center(child: CircularProgressIndicator(color: Colors.white)),
           if (countdown > 0)
             Center(
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black.withOpacity(0.6),
-                  border: Border.all(color: Colors.white30, width: 2),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '$countdown',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 60,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+              child:
+                  Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withOpacity(0.6),
+                          border: Border.all(color: Colors.white30, width: 2),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$countdown',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 60,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      )
+                      .animate(key: ValueKey(countdown))
+                      .scale(
+                        begin: const Offset(0.6, 0.6),
+                        end: const Offset(1, 1),
+                        curve: Curves.easeOutBack,
+                        duration: 260.ms,
+                      )
+                      .fadeIn(duration: 180.ms),
             ),
           IgnorePointer(
             child: Center(
@@ -419,7 +429,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
           fontWeight: FontWeight.bold,
           fontSize: 16,
         ),
-      ),
+      ).animate().fadeIn(duration: 300.ms),
       leading: Padding(
         padding: const EdgeInsets.all(8),
         child: IconButton(
@@ -495,17 +505,20 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: isCaptureBusy
-                      ? Colors.orange
-                      : _faceQualityPassed
-                      ? Colors.green
-                      : Colors.amber,
-                  shape: BoxShape.circle,
-                ),
-              ),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: isCaptureBusy
+                          ? Colors.orange
+                          : _faceQualityPassed
+                          ? Colors.green
+                          : Colors.amber,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+                  .animate(onPlay: (c) => c.repeat())
+                  .fade(duration: 900.ms)
+                  .scale(duration: 900.ms),
               const SizedBox(width: 10),
               Text(
                 _buildScanStatusLabel(),
@@ -520,27 +533,33 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
           const SizedBox(height: 16),
           if (_lastFaceClearanceMessage != null)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: _faceQualityPassed
-                    ? Colors.green.withOpacity(0.2)
-                    : Colors.orange.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _faceQualityPassed ? Colors.green : Colors.orange,
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                _lastFaceClearanceMessage!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _faceQualityPassed ? Colors.green : Colors.orange,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _faceQualityPassed
+                        ? Colors.green.withOpacity(0.2)
+                        : Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _faceQualityPassed ? Colors.green : Colors.orange,
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    _lastFaceClearanceMessage!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _faceQualityPassed ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                )
+                .animate(key: ValueKey(_lastFaceClearanceMessage))
+                .fadeIn(duration: 200.ms)
+                .scale(begin: const Offset(0.94, 0.94), duration: 200.ms),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -597,7 +616,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
           ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 260.ms).slideY(begin: 0.08, end: 0);
   }
 
   Widget _buildPreScanGuidePanel() {
@@ -637,17 +656,25 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
           Row(
             children: [
               Expanded(
-                child: _buildGuideImage(
-                  imagePath: AppImg.takeofGlasses,
-                  label: AppStrings.tr('guide_remove_glasses'),
-                ),
+                child:
+                    _buildGuideImage(
+                          imagePath: AppImg.takeofGlasses,
+                          label: AppStrings.tr('guide_remove_glasses'),
+                        )
+                        .animate()
+                        .fadeIn(delay: 80.ms, duration: 240.ms)
+                        .slideY(begin: 0.15, end: 0),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildGuideImage(
-                  imagePath: AppImg.nohatandmask,
-                  label: AppStrings.tr('guide_no_hat_mask'),
-                ),
+                child:
+                    _buildGuideImage(
+                          imagePath: AppImg.nohatandmask,
+                          label: AppStrings.tr('guide_no_hat_mask'),
+                        )
+                        .animate()
+                        .fadeIn(delay: 160.ms, duration: 240.ms)
+                        .slideY(begin: 0.15, end: 0),
               ),
             ],
           ),
@@ -680,7 +707,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
           ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 260.ms).slideY(begin: 0.1, end: 0);
   }
 
   Widget _buildGuideImage({required String imagePath, required String label}) {
@@ -721,10 +748,14 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
       height: 280,
       child: Stack(
         children: [
-          Container(
+          AnimatedContainer(
+            duration: 250.ms,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white70, width: 2),
+              border: Border.all(
+                color: _faceQualityPassed ? Colors.greenAccent : Colors.white70,
+                width: _faceQualityPassed ? 2.6 : 2,
+              ),
             ),
           ),
           Positioned.fill(
@@ -765,28 +796,34 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Container(color: Colors.white.withOpacity(0.18)),
+        Container(
+          color: Colors.white.withOpacity(0.18),
+        ).animate().fadeIn(duration: 100.ms),
         Center(
           child: Transform.translate(
             offset: const Offset(0, -36),
-            child: Container(
-              width: 248,
-              height: 288,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Colors.greenAccent.withOpacity(0.95),
-                  width: 4,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.greenAccent.withOpacity(0.45),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-            ),
+            child:
+                Container(
+                      width: 248,
+                      height: 288,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.greenAccent.withOpacity(0.95),
+                          width: 4,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.greenAccent.withOpacity(0.45),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                    )
+                    .animate()
+                    .fadeIn(duration: 120.ms)
+                    .scale(begin: const Offset(0.96, 0.96), duration: 160.ms),
           ),
         ),
       ],
@@ -819,10 +856,18 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.check_circle_rounded,
-                color: Colors.greenAccent,
-                size: 72,
-              ),
+                    Icons.check_circle_rounded,
+                    color: Colors.greenAccent,
+                    size: 72,
+                  )
+                  .animate()
+                  .scale(
+                    begin: const Offset(0.4, 0.4),
+                    end: const Offset(1, 1),
+                    curve: Curves.elasticOut,
+                    duration: 600.ms,
+                  )
+                  .fadeIn(duration: 200.ms),
               const SizedBox(height: 14),
               Text(
                 AppStrings.tr('face_registered_success'),

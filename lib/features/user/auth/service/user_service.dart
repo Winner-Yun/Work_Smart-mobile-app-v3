@@ -40,4 +40,73 @@ class UserService {
       throw Exception('Unexpected error: $e');
     }
   }
+
+  Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> updates,
+  ) async {
+    const String endpoint = ApiEndpoints.me;
+    debugPrint('[UserService] PATCH $endpoint');
+    debugPrint('[UserService] Body: $updates');
+
+    try {
+      final Response response = await _apiClient.patch(
+        endpoint,
+        data: updates,
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data;
+        if (data is Map<String, dynamic>) {
+          return data.containsKey('data') && data['data'] is Map
+              ? Map<String, dynamic>.from(data['data'] as Map)
+              : data;
+        }
+        return Map<String, dynamic>.from(data as Map);
+      } else {
+        throw Exception(
+          'Failed to update profile. Status: ${response.statusCode}',
+        );
+      }
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final serverMessage = e.response?.data?['message'] ?? e.message;
+      debugPrint(
+        '[UserService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
+      );
+      throw Exception('Network error [$statusCode]: $serverMessage');
+    } catch (e, stackTrace) {
+      debugPrint('[UserService] Unexpected Error: $e');
+      debugPrint('[UserService] StackTrace: $stackTrace');
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
+  Future<void> logout(String refreshToken) async {
+    const String endpoint = ApiEndpoints.logout;
+    debugPrint('[UserService] POST $endpoint');
+
+    try {
+      final Response response = await _apiClient.post(
+        endpoint,
+        data: {'refresh_token': refreshToken},
+      );
+
+      if (response.statusCode != 200 &&
+          response.statusCode != 201 &&
+          response.statusCode != 204) {
+        throw Exception('Failed to logout. Status: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final serverMessage = e.response?.data?['message'] ?? e.message;
+      debugPrint(
+        '[UserService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
+      );
+      throw Exception('Network error [$statusCode]: $serverMessage');
+    } catch (e, stackTrace) {
+      debugPrint('[UserService] Unexpected Error: $e');
+      debugPrint('[UserService] StackTrace: $stackTrace');
+      throw Exception('Unexpected error: $e');
+    }
+  }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AnnualLeaveRequestScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -18,9 +20,14 @@ class AnnualLeaveRequestScreen extends StatefulWidget {
 
 class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
   static const int _annualLeaveTotal = 18;
-  late int _annualLeaveUsed;
-  late int _annualLeaveRemaining;
-  late UserProfile _currentUser;
+  final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
+
+  int _annualLeaveUsed = 0;
+  int _annualLeaveRemaining = _annualLeaveTotal;
+  List<LeaveModel> _myLeaves = <LeaveModel>[];
+  String? _workspaceId;
+  bool _isLoadingLeaves = true;
+
   late String? loggedInUserId;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _reasonController = TextEditingController();
@@ -122,7 +129,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     return LeaveRequestLogic.isDateRangeOverlappingExisting(
       startDate: date,
       endDate: date,
-      existingRecords: _currentUser.leaveRecords,
+      existingRecords: _myLeaves,
     );
   }
 
@@ -130,7 +137,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     return LeaveRequestLogic.isDateRangeOverlappingExisting(
       startDate: startDate,
       endDate: endDate,
-      existingRecords: _currentUser.leaveRecords,
+      existingRecords: _myLeaves,
     );
   }
 
@@ -150,27 +157,37 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
         .trim();
   }
 
-  void _loadData() {
-    final String userId = loggedInUserId ?? _resolveUserId();
-    final Map<String, dynamic> currentUserData = userId.isEmpty
-        ? defaultUserRecord
-        : usersFinalData.firstWhere(
-            (user) =>
-                (user['uid'] ?? user['user_id'] ?? user['userId'])
-                    ?.toString()
-                    .trim() ==
-                userId,
-            orElse: () => defaultUserRecord,
-          );
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
 
-    _currentUser = UserProfile.fromJson(currentUserData);
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoadingLeaves = false);
+      return;
+    }
 
-    // Calculate annual leave used from leave records - sum actual days, not record count
-    final annualLeaves = _currentUser.leaveRecords
+    try {
+      final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
+      if (!mounted) return;
+      setState(() {
+        _myLeaves = leaves;
+        _recalculateQuota();
+        _isLoadingLeaves = false;
+      });
+    } catch (e) {
+      // The list endpoint is known to be unreliable right now, so fail
+      // open with an empty list rather than blocking the request form.
+      debugPrint('[AnnualLeaveRequestScreen] Failed to load leaves: $e');
+      if (mounted) setState(() => _isLoadingLeaves = false);
+    }
+  }
+
+  void _recalculateQuota() {
+    final annualLeaves = _myLeaves
         .where(
           (leave) =>
-              leave.type.toLowerCase().contains('annual') ||
-              leave.type.toLowerCase().contains('casual'),
+              leave.leaveType.toLowerCase().contains('annual') ||
+              leave.leaveType.toLowerCase().contains('casual'),
         )
         .toList();
     _annualLeaveUsed = annualLeaves.fold(
@@ -222,10 +239,8 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       return;
     }
 
-    final String userId = _resolveUserId().isNotEmpty
-        ? _resolveUserId()
-        : _currentUser.uid.trim();
-    if (userId.isEmpty) {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -242,13 +257,31 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       _isSubmitting = true;
     });
 
-    final bool submitted = await LeaveRequestLogic.submitLeaveRequest(
-      userId: userId,
-      type: 'annual_leave',
-      startDate: _startDate!,
-      endDate: effectiveEndDate,
-      reason: _reasonController.text,
+    final DateTime normalizedStart = DateTime(
+      _startDate!.year,
+      _startDate!.month,
+      _startDate!.day,
     );
+    final DateTime normalizedEnd = DateTime(
+      effectiveEndDate.year,
+      effectiveEndDate.month,
+      effectiveEndDate.day,
+    );
+
+    bool submitted = false;
+    try {
+      await _leaveRepo.createLeave(
+        workspaceId,
+        leaveType: 'annual_leave',
+        reason: _reasonController.text.trim(),
+        startDate: normalizedStart.toIso8601String(),
+        endDate: normalizedEnd.toIso8601String(),
+      );
+      submitted = true;
+    } catch (e) {
+      debugPrint('[AnnualLeaveRequestScreen] Submit failed: $e');
+      submitted = false;
+    }
 
     if (!mounted) return;
 
@@ -293,43 +326,48 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          autovalidateMode: _showValidationErrors
-              ? AutovalidateMode.always
-              : AutovalidateMode.disabled,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildBalanceCard(context),
-              const SizedBox(height: 25),
-              _buildSectionTitle(AppStrings.tr('select_date'), context),
-              const SizedBox(height: 15),
-              _buildRequestTypeToggle(context),
-              const SizedBox(height: 12),
-              Text(
-                AppStrings.tr('annual_leave_date_mode_hint'),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.color?.withOpacity(0.75),
-                ),
+      body: _isLoadingLeaves
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                autovalidateMode: _showValidationErrors
+                    ? AutovalidateMode.always
+                    : AutovalidateMode.disabled,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildBalanceCard(context),
+                    const SizedBox(height: 25),
+                    _buildSectionTitle(AppStrings.tr('select_date'), context),
+                    const SizedBox(height: 15),
+                    _buildRequestTypeToggle(context),
+                    const SizedBox(height: 12),
+                    Text(
+                      AppStrings.tr('annual_leave_date_mode_hint'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.color?.withOpacity(0.75),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildDateRangePicker(context),
+                    const SizedBox(height: 25),
+                    _buildSectionTitle(
+                      AppStrings.tr('reason_for_request'),
+                      context,
+                    ),
+                    const SizedBox(height: 15),
+                    _buildTextArea(context),
+                    const SizedBox(height: 40),
+                    _buildSubmitButton(context),
+                  ],
+                ).animate().fadeIn(duration: 500.ms),
               ),
-              const SizedBox(height: 10),
-              _buildDateRangePicker(context),
-              const SizedBox(height: 25),
-              _buildSectionTitle(AppStrings.tr('reason_for_request'), context),
-              const SizedBox(height: 15),
-              _buildTextArea(context),
-              const SizedBox(height: 40),
-              _buildSubmitButton(context),
-            ],
-          ).animate().fadeIn(duration: 500.ms),
-        ),
-      ),
+            ),
     );
   }
 

@@ -1,17 +1,16 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/leave_record.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LeaveAllRequestsScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -23,94 +22,49 @@ class LeaveAllRequestsScreen extends StatefulWidget {
 }
 
 class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
-  late UserProfile _currentUser;
-  late List<LeaveRecord> _history;
-  late List<LeaveRecord> _filteredHistory = [];
-  late String? loggedInUserId;
+  final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
+  List<LeaveModel> _history = <LeaveModel>[];
+  List<LeaveModel> _filteredHistory = <LeaveModel>[];
+  String? _workspaceId;
   DateTime? _selectedDate;
   String? _selectedForRemoveRequestId;
   bool _isRemoveMode = false;
   bool _hasDeletedLeaveRequest = false;
   bool _isLoading = true;
   LeaveSortBy _sortBy = LeaveSortBy.dateNewest;
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
 
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
 
   @override
   void initState() {
     super.initState();
-    loggedInUserId = widget.loginData?['uid'];
     _loadData();
   }
 
   Future<void> _loadData() async {
-    final resolvedUserId = _resolveUserId();
-    debugPrint('Resolved user ID: $resolvedUserId');
-    debugPrint('loginUserId: $loggedInUserId');
-    final users = await _realtimeDataController.fetchUserRecords();
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
 
-    final currentUserData = users.firstWhere(
-      (user) =>
-          (user['uid'] ?? user['user_id'] ?? user['userId'])
-              .toString()
-              .trim() ==
-          resolvedUserId,
-      orElse: () => users.first,
-    );
-    debugPrint(usersFinalData.toString());
-    _currentUser = UserProfile.fromJson(currentUserData);
-
-    _history = _currentUser.leaveRecords.toList()
-      ..sort((a, b) => b.startDate.compareTo(a.startDate));
-
-    setState(() {
-      _currentUser = UserProfile.fromJson(currentUserData);
-
-      _history = (_currentUser.leaveRecords).toList()
-        ..sort((a, b) => b.startDate.compareTo(a.startDate));
-
-      _applyFilter();
-      _isLoading = false;
-    });
-  }
-
-  String _resolveUserId() {
-    // Try to get from loginData first
-    final fromLoginData =
-        (widget.loginData?['uid'] ??
-                widget.loginData?['user_id'] ??
-                widget.loginData?['userId'] ??
-                '')
-            .toString()
-            .trim();
-
-    if (fromLoginData.isNotEmpty) {
-      return fromLoginData;
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
     }
 
-    // Fall back to FirebaseAuth current user
-    final firebaseUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    if (firebaseUid.isNotEmpty) {
-      return firebaseUid;
+    try {
+      final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
+      if (!mounted) return;
+      setState(() {
+        _history = leaves.toList()
+          ..sort((a, b) => b.startDate.compareTo(a.startDate));
+        _applyFilter();
+        _isLoading = false;
+      });
+    } catch (e) {
+      // The list endpoint is known to be unreliable right now, so fail
+      // open with an empty list rather than crashing the screen.
+      debugPrint('[LeaveAllRequestsScreen] Failed to load leaves: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    // Last resort: use first user from the list if available
-    if (usersFinalData.isNotEmpty) {
-      final firstUserId =
-          (usersFinalData.first['uid'] ??
-                  usersFinalData.first['user_id'] ??
-                  usersFinalData.first['userId'] ??
-                  '')
-              .toString()
-              .trim();
-      if (firstUserId.isNotEmpty) {
-        return firstUserId;
-      }
-    }
-
-    return '';
   }
 
   void _applyFilter() {
@@ -145,7 +99,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     });
   }
 
-  void _handleLongPress(LeaveRecord record, bool isSelectedForRemove) {
+  void _handleLongPress(LeaveModel record, bool isSelectedForRemove) {
     if (!LeaveRequestLogic.canRemoveStatus(record.status)) return;
     final LeaveRemoveModeState state =
         LeaveRequestLogic.getLongPressRemoveModeState(
@@ -159,7 +113,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     });
   }
 
-  Future<void> _handleTap(LeaveRecord record, bool isSelectedForRemove) async {
+  Future<void> _handleTap(LeaveModel record, bool isSelectedForRemove) async {
     if (_isRemoveMode) {
       if (!LeaveRequestLogic.canRemoveStatus(record.status)) {
         await LeaveRequestLogic.showRemoveNotAllowedDialog(context);
@@ -181,8 +135,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     final bool? wasDeleted = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            LeaveDetailViewScreen(leave: record, userId: _currentUser.uid),
+        builder: (context) => LeaveDetailViewScreen(leave: record),
       ),
     );
 
@@ -196,11 +149,11 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     }
   }
 
-  Future<void> _confirmAndDelete(LeaveRecord record) async {
+  Future<void> _confirmAndDelete(LeaveModel record) async {
     final bool removed = await LeaveRequestLogic.confirmAndDeleteLeave(
       context,
       record: record,
-      userId: _currentUser.uid,
+      onDelete: () => _leaveRepo.deleteLeave(record.id),
     );
     if (!removed) return;
 
@@ -455,15 +408,15 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     );
   }
 
-  Widget _buildRequestListItem(LeaveRecord record) {
-    final String title = LeaveRequestLogic.getLeaveTitle(record.type);
+  Widget _buildRequestListItem(LeaveModel record) {
+    final String title = LeaveRequestLogic.getLeaveTitle(record.leaveType);
     final String subtitle = LeaveRequestLogic.formatDateRange(record);
     final String status = LeaveRequestLogic.getStatusText(record.status);
     final Color statusColor = LeaveRequestLogic.getStatusColor(record.status);
-    final IconData icon = LeaveRequestLogic.getLeaveIcon(record.type);
+    final IconData icon = LeaveRequestLogic.getLeaveIcon(record.leaveType);
     final bool isRemovable = LeaveRequestLogic.canRemoveStatus(record.status);
     final bool isSelectedForRemove =
-        isRemovable && _selectedForRemoveRequestId == record.requestId;
+        isRemovable && _selectedForRemoveRequestId == record.id;
 
     return Material(
       color: Colors.transparent,

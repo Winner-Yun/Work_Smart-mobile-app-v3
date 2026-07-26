@@ -1,20 +1,24 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/policy_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/leave_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_all_requests_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/leave_record.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/leave_management_skeleton_loading.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LeaveDetailScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -32,82 +36,44 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   late Animation<double> _annualAnimation;
   late Animation<double> _sickAnimation;
 
-  static const int _annualTotal = 18;
-  static const int _sickTotal = 5;
+  // Fallback totals used until the workspace policy (cached locally, or
+  // freshly fetched from the server) provides the real limits.
+  static const int _defaultAnnualTotal = 18;
+  static const int _defaultSickTotal = 5;
+  int _annualTotal = _defaultAnnualTotal;
+  int _sickTotal = _defaultSickTotal;
 
-  late UserProfile _currentUser;
-  late List<LeaveRecord> _leaveRecords;
-  late List<LeaveRecord> _history;
-  late int _annualUsed;
-  late int _sickUsed;
-  late double _annualRatio;
-  late double _sickRatio;
+  final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
+  final PolicyRepository _policyRepo = PolicyRepository(PolicyService());
+  List<LeaveModel> _leaveRecords = <LeaveModel>[];
+  List<LeaveModel> _history = <LeaveModel>[];
+  String? _workspaceId;
+  int _annualUsed = 0;
+  int _sickUsed = 0;
+  double _annualRatio = 0.0;
+  double _sickRatio = 0.0;
 
   String? _selectedForRemoveRequestId;
   bool _isOpeningAllRequests = false;
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _scrolledUp = false;
 
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
-
-  String _resolveUserId() {
-    // Try to get from loginData first
-    final fromLoginData =
-        (widget.loginData?['uid'] ??
-                widget.loginData?['user_id'] ??
-                widget.loginData?['userId'] ??
-                '')
-            .toString()
-            .trim();
-
-    if (fromLoginData.isNotEmpty) {
-      return fromLoginData;
-    }
-
-    // Fall back to FirebaseAuth current user
-    final firebaseUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    if (firebaseUid.isNotEmpty) {
-      return firebaseUid;
-    }
-
-    // Last resort: use first user from the list if available
-    if (usersFinalData.isNotEmpty) {
-      final firstUserId =
-          (usersFinalData.first['uid'] ??
-                  usersFinalData.first['user_id'] ??
-                  usersFinalData.first['userId'] ??
-                  '')
-              .toString()
-              .trim();
-      if (firstUserId.isNotEmpty) {
-        return firstUserId;
-      }
-    }
-
-    return '';
-  }
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize late variables with default values to prevent LateInitializationError
-    _currentUser = UserProfile.fromJson(defaultUserRecord);
-    _leaveRecords = [];
-    _history = [];
-    _annualUsed = 0;
-    _sickUsed = 0;
-    _annualRatio = 0.0;
-    _sickRatio = 0.0;
-
     // Set up animation controllers
     _annualController = AnimationController(vsync: this, duration: 1500.ms);
     _sickController = AnimationController(vsync: this, duration: 1500.ms);
 
-    // Load actual data first
-    _loadData();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
 
-    // Now create and start animations with the loaded data
+    // Now create the animations; they'll be re-targeted once real data
+    // (and the real policy totals) have loaded.
     _annualAnimation = Tween<double>(begin: 0, end: _annualRatio).animate(
       CurvedAnimation(parent: _annualController, curve: Curves.easeInOut),
     );
@@ -115,64 +81,159 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       CurvedAnimation(parent: _sickController, curve: Curves.easeInOut),
     );
 
-    _annualController.forward();
-    _sickController.forward();
+    _loadInitialData();
   }
 
-  Future<void> _loadData() async {
-    final resolvedUserId = _resolveUserId();
-
-    await _loadUserDataFromFirebase(resolvedUserId);
-  }
-
-  Future<void> _loadUserDataFromFirebase(String userId) async {
-    try {
-      final users = await _realtimeDataController.fetchUserRecords();
-
-      if (users.isEmpty) {
-        setState(() {
-          _currentUser = UserProfile.fromJson(defaultUserRecord);
-          _applyUserData();
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final userData = users.firstWhere(
-        (user) =>
-            (user['uid'] ?? user['user_id'] ?? user['userId'])
-                .toString()
-                .trim() ==
-            userId,
-        orElse: () => users.first,
-      );
-      debugPrint(userData.toString());
-
-      setState(() {
-        _currentUser = UserProfile.fromJson(userData);
-        _applyUserData();
-        _isLoading = false;
-      });
-    } catch (e, stack) {
-      debugPrintStack(stackTrace: stack);
-
-      setState(() {
-        _currentUser = UserProfile.fromJson(defaultUserRecord);
-        _leaveRecords = _currentUser.leaveRecords;
-        _annualUsed = 0;
-        _sickUsed = 0;
-        _annualRatio = 0;
-        _sickRatio = 0;
-        _history = [];
-        _isLoading = false;
-        _updateAnimations();
-      });
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !_isRefreshing) {
+      _scrolledUp = true;
+      _handleRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
     }
   }
 
-  void _applyUserData() {
-    _leaveRecords = _currentUser.leaveRecords;
+  /// Resolves the workspace, then waits for the policy to be fetched fresh
+  /// from the server before loading the leave list — the skeleton stays up
+  /// for this whole span, so the screen never flashes the hardcoded
+  /// fallback totals (or a stale cached value) before jumping to the real
+  /// numbers a moment later.
+  Future<void> _loadInitialData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
 
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    await _fetchPolicyFromServer();
+    await _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
+
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    // Leave totals come from the workspace policy, cached locally — read it
+    // here instead of hardcoding limits. By the time this runs on initial
+    // load, `_loadInitialData` has already awaited a fresh server fetch, so
+    // this is normally reading back what that fetch just saved.
+    final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+      _workspaceId!,
+    );
+    _applyPolicyLimits(cachedPolicyMap);
+
+    try {
+      final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
+      if (!mounted) return;
+      setState(() {
+        _leaveRecords = leaves;
+        _applyUserData();
+        _isLoading = false;
+      });
+    } catch (e) {
+      // The list endpoint is known to be unreliable right now, so fail
+      // open with an empty list rather than crashing the screen.
+      debugPrint('[LeaveDetailScreen] Failed to load leaves: $e');
+      if (mounted) {
+        setState(() {
+          _leaveRecords = <LeaveModel>[];
+          _annualUsed = 0;
+          _sickUsed = 0;
+          _annualRatio = 0;
+          _sickRatio = 0;
+          _history = [];
+          _isLoading = false;
+          _updateAnimations();
+        });
+      }
+    }
+  }
+
+  void _applyPolicyLimits(Map<String, dynamic>? policyMap) {
+    final int? annualLimit = _readPositiveInt(
+      policyMap?['annual_leave_limit'],
+    );
+    final int? sickLimit = _readPositiveInt(policyMap?['sick_leave_limit']);
+    if (annualLimit != null) _annualTotal = annualLimit;
+    if (sickLimit != null) _sickTotal = sickLimit;
+  }
+
+  int? _readPositiveInt(dynamic value) {
+    final int? parsed = value is num ? value.toInt() : int.tryParse('$value');
+    return (parsed != null && parsed > 0) ? parsed : null;
+  }
+
+  /// Fetches the policy fresh from the server, updates the local cache
+  /// (skipping the write if nothing changed), and refreshes the on-screen
+  /// totals. Best-effort: falls back to whatever is cached on failure.
+  Future<void> _fetchPolicyFromServer() async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    try {
+      final fetchedPolicy = await _policyRepo.getPolicy(workspaceId);
+      final policyMap = {
+        'id': fetchedPolicy.id,
+        'workspace_id': fetchedPolicy.workspaceId,
+        'name': fetchedPolicy.name,
+        'work_start_time': fetchedPolicy.workStartTime,
+        'work_end_time': fetchedPolicy.workEndTime,
+        'check_in_start': fetchedPolicy.checkInStart,
+        'check_out_start': fetchedPolicy.checkOutStart,
+        'late_buffer_minutes': fetchedPolicy.lateBufferMinutes,
+        'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
+        'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
+        'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+        'status': fetchedPolicy.status,
+      };
+
+      final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+        workspaceId,
+      );
+      final bool policyChanged =
+          cachedPolicyMap == null ||
+          jsonEncode(cachedPolicyMap) != jsonEncode(policyMap);
+      if (policyChanged) {
+        await DatabaseHelper().saveCachedPolicy(workspaceId, policyMap);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _applyPolicyLimits(policyMap);
+        _annualRatio = (_annualUsed / _annualTotal).clamp(0, 1).toDouble();
+        _sickRatio = (_sickUsed / _sickTotal).clamp(0, 1).toDouble();
+      });
+    } catch (e) {
+      // Policy refresh is best-effort; fall back to whatever is cached.
+      debugPrint('[LeaveDetailScreen] Failed to refresh policy: $e');
+    }
+  }
+
+  /// Pull-to-refresh (triggered by overscrolling past the top, matching the
+  /// homepage gesture): re-fetches the policy fresh and reloads the leave
+  /// list. Guarded by `_isRefreshing`/`_scrolledUp` (see `_onScroll`) so a
+  /// single pull gesture only triggers one round of calls instead of firing
+  /// again on every scroll event while overscrolled.
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    if (mounted) setState(() => _isRefreshing = true);
+
+    await _fetchPolicyFromServer();
+    await _loadData();
+
+    if (mounted) setState(() => _isRefreshing = false);
+  }
+
+  void _applyUserData() {
     _annualUsed = _sumUsedDays('annual_leave');
     _sickUsed = _sumUsedDays('sick_leave');
 
@@ -187,7 +248,9 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
 
   int _sumUsedDays(String type) {
     final approvedRecords = _leaveRecords
-        .where((record) => record.type == type && record.status == 'approved')
+        .where(
+          (record) => record.leaveType == type && record.status == 'approved',
+        )
         .toList();
 
     return approvedRecords.fold(
@@ -222,11 +285,11 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     _sickController.forward(from: 0);
   }
 
-  Future<void> _confirmAndDelete(LeaveRecord record) async {
+  Future<void> _confirmAndDelete(LeaveModel record) async {
     final bool removed = await LeaveRequestLogic.confirmAndDeleteLeave(
       context,
       record: record,
-      userId: _currentUser.uid,
+      onDelete: () => _leaveRepo.deleteLeave(record.id),
       showSnackBar: false,
     );
     if (!removed) return;
@@ -252,6 +315,8 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   void dispose() {
     _annualController.dispose();
     _sickController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -260,44 +325,133 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          _buildDoubleOverviewCard(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: _isLoading || _isRefreshing
+          ? const LeaveManagementSkeletonLoading()
+          : Column(
               children: [
-                _buildSectionHeader(
-                  AppStrings.tr('request_history'),
-                  AppStrings.tr('view_all'),
+                _buildDoubleOverviewCard(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionHeader(
+                        AppStrings.tr('request_history'),
+                        AppStrings.tr('view_all'),
+                      ),
+                      const SizedBox(height: 5),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 5),
+                Expanded(
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      CustomScrollView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        slivers: [
+                          if (_history.isEmpty)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  top:
+                                      MediaQuery.of(context).size.height *
+                                      0.1,
+                                ),
+                                child: _buildEmptyState(context),
+                              ),
+                            )
+                          else
+                            SliverPadding(
+                              padding: const EdgeInsets.only(
+                                left: 20,
+                                right: 20,
+                                bottom: 20,
+                              ),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final record = _history[index];
+                                  return _buildTimelineItem(record);
+                                }, childCount: _history.length),
+                              ),
+                            ),
+                        ],
+                      ),
+                      _buildPullToRefreshIndicator(),
+                    ],
+                  ),
+                ),
               ],
             ),
-          ),
-          Expanded(
-            child: _isLoading
-                ? const LeaveManagementSkeletonLoading()
-                : _history.isEmpty
-                ? _buildEmptyState(context)
-                : ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.only(
-                      left: 20,
-                      right: 20,
-                      bottom: 20,
-                    ),
-                    itemCount: _history.length,
-                    itemBuilder: (context, index) {
-                      final record = _history[index];
-                      return _buildTimelineItem(record);
-                    },
-                  ),
-          ),
-        ],
-      ),
       bottomNavigationBar: _buildBottomAction(),
+    );
+  }
+
+  // --- Pull-to-refresh indicator: matches the homepage's overscroll-driven
+  // rotating arrow → refresh icon. Once the pull is released, `_isRefreshing`
+  // swaps the whole screen to the skeleton loader (see `build` above) so
+  // this indicator never needs its own "loading" state or text.
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || _isLoading || _isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -452,14 +606,14 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     );
   }
 
-  Widget _buildTimelineItem(LeaveRecord record) {
-    final String title = LeaveRequestLogic.getLeaveTitle(record.type);
+  Widget _buildTimelineItem(LeaveModel record) {
+    final String title = LeaveRequestLogic.getLeaveTitle(record.leaveType);
     final String statusText = LeaveRequestLogic.getStatusText(record.status);
     final Color color = LeaveRequestLogic.getStatusColor(record.status);
     final String dateLabel = _formatDateRange(record.startDate, record.endDate);
     final bool isRemovable = LeaveRequestLogic.canRemoveStatus(record.status);
     final bool isSelectedForRemove =
-        isRemovable && _selectedForRemoveRequestId == record.requestId;
+        isRemovable && _selectedForRemoveRequestId == record.id;
 
     return Material(
       color: Colors.transparent,
@@ -473,7 +627,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
           setState(() {
             _selectedForRemoveRequestId = isSelectedForRemove
                 ? null
-                : record.requestId;
+                : record.id;
           });
         },
         onTap: () async {
@@ -485,7 +639,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
             setState(() {
               _selectedForRemoveRequestId = isSelectedForRemove
                   ? null
-                  : record.requestId;
+                  : record.id;
             });
             return;
           }
@@ -493,10 +647,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
           final bool? wasDeleted = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
-              builder: (context) => LeaveDetailViewScreen(
-                leave: record,
-                userId: _currentUser.uid,
-              ),
+              builder: (context) => LeaveDetailViewScreen(leave: record),
             ),
           );
 
@@ -787,7 +938,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     return _leaveRecords
         .where(
           (record) =>
-              record.type == 'sick_leave' &&
+              record.leaveType == 'sick_leave' &&
               (record.status == 'pending' || record.status == 'approved'),
         )
         .length;

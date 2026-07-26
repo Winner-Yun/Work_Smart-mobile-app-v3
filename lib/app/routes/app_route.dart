@@ -13,7 +13,6 @@ import 'package:flutter_worksmart_app/features/user/presentation/homepage_screen
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/notification_screens.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/mainscreen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/help_support_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/setting_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/telegram_integration.dart';
 
 /// AppRoute: Central routing configuration
@@ -91,7 +90,6 @@ class AppRoute {
     ),
 
     // Settings Routes
-    settingScreen: _buildRoute((args) => SettingsScreen(loginData: args)),
     telegramConfig: _buildRoute((args) => TelegramIntegration(loginData: args)),
     helpSupportScreen: (context) => const HelpSupportScreen(),
   };

@@ -1,19 +1,30 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
+import 'package:flutter_worksmart_app/config/language_manager.dart';
+import 'package:flutter_worksmart_app/config/theme_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/setting_screen.dart';
-import 'package:flutter_worksmart_app/shared/model/user_model/user_profile.dart';
+import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/profile_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/workspace_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/profile_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
+import 'package:flutter_worksmart_app/shared/model/user_model.dart';
+import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/app_profile_avatar.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/profile_skeleton_loading.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -25,113 +36,224 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  UserProfile _currentUser = UserProfile.fromJson(const <String, dynamic>{});
-  File? _image;
+  final UserRepository _userRepo = UserRepository(UserService());
+  final ProfileRepository _profileRepo = ProfileRepository(ProfileService());
+  final WorkspaceRepository _workspaceRepo = WorkspaceRepository(
+    WorkspaceService(),
+  );
   final ImagePicker _picker = ImagePicker();
-  final RealtimeDataController _dataController = RealtimeDataController();
-  final CloudinaryProfileImageService _cloudinaryProfileImageService =
-      CloudinaryProfileImageService();
+
+  static final RealtimeDataController _dataController =
+      RealtimeDataController();
+
+  UserModel? _currentUser;
+  String? _workspaceName;
+  File? _image;
   bool _isUploadingProfileImage = false;
   bool _isLoading = true;
-  String? _resolvedOfficeName;
+
+  String? _loggedInUserId;
+  bool _isNotificationEnabled = true;
+  bool _isSavingNotification = false;
+  StreamSubscription<Map<String, dynamic>?>? _userRecordSubscription;
 
   @override
   void initState() {
     super.initState();
+    _loggedInUserId = widget.loginData?['uid']?.toString();
     _loadData();
+    _loadNotificationPreference();
+    _listenUserRecordRealtime();
   }
 
-  String _resolveUserId() {
-    return (widget.loginData?['uid'] ??
-            widget.loginData?['user_id'] ??
-            widget.loginData?['userId'] ??
-            '')
-        .toString()
-        .trim();
+  @override
+  void dispose() {
+    _userRecordSubscription?.cancel();
+    super.dispose();
   }
 
-  bool _matchesUserId(Map<String, dynamic> user, String userId) {
-    if (userId.isEmpty) return false;
+  void _loadNotificationPreference() {
+    final String userId = (_loggedInUserId ?? '').trim();
+    if (userId.isEmpty) return;
 
-    final String candidateId =
-        (user['uid'] ?? user['user_id'] ?? user['userId'] ?? '')
-            .toString()
-            .trim();
-    return candidateId == userId;
+    final int index = usersFinalData.indexWhere(
+      (user) => user['uid']?.toString().trim() == userId,
+    );
+    if (index == -1) return;
+
+    final dynamic appSettings =
+        usersFinalData[index]['app_settings'] ??
+        usersFinalData[index]['app_setting'];
+    _isNotificationEnabled = _readBoolSetting(
+      appSettings is Map
+          ? (appSettings['notifications_enabled'] ??
+                appSettings['notification_enable'] ??
+                appSettings['notification_enabled'])
+          : null,
+      fallback: true,
+    );
+  }
+
+  bool _readBoolSetting(dynamic value, {required bool fallback}) {
+    if (value is bool) return value;
+    final normalized = (value ?? '').toString().trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0' || normalized == 'no') {
+      return false;
+    }
+    return fallback;
+  }
+
+  void _listenUserRecordRealtime() {
+    final String userId = (_loggedInUserId ?? '').trim();
+    if (userId.isEmpty) return;
+
+    _userRecordSubscription = _dataController.watchUserRecord(userId).listen((
+      record,
+    ) {
+      if (!mounted || record == null) return;
+      final dynamic appSettings =
+          record['app_settings'] ?? record['app_setting'];
+      final bool resolved = _readBoolSetting(
+        appSettings is Map
+            ? (appSettings['notifications_enabled'] ??
+                  appSettings['notification_enable'] ??
+                  appSettings['notification_enabled'])
+            : null,
+        fallback: true,
+      );
+      setState(() => _isNotificationEnabled = resolved);
+    });
+  }
+
+  Future<void> _handleNotificationChange(bool value) async {
+    if (_isSavingNotification) return;
+    final String userId = (_loggedInUserId ?? '').trim();
+    if (userId.isEmpty) return;
+
+    final bool previousValue = _isNotificationEnabled;
+    setState(() {
+      _isNotificationEnabled = value;
+      _isSavingNotification = true;
+    });
+
+    if (value) {
+      await LocalNotificationService.instance.requestPermissions();
+    } else {
+      await LocalNotificationService.instance.cancelAll();
+    }
+
+    final int userIndex = usersFinalData.indexWhere(
+      (user) => user['uid']?.toString().trim() == userId,
+    );
+    final Map<String, dynamic> appSettings =
+        userIndex != -1 && usersFinalData[userIndex]['app_settings'] is Map
+        ? Map<String, dynamic>.from(
+            usersFinalData[userIndex]['app_settings'] as Map,
+          )
+        : <String, dynamic>{};
+    appSettings['notifications_enabled'] = value;
+
+    try {
+      await _dataController.updateUserRecord(userId, {
+        'app_settings': appSettings,
+      });
+      if (userIndex != -1) {
+        usersFinalData[userIndex]['app_settings'] = appSettings;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isNotificationEnabled = previousValue);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update notification setting.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingNotification = false);
+      }
+    }
+  }
+
+  Future<void> _handleLanguageChange(String langCode) async {
+    if (LanguageManager().locale == langCode) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(30),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color,
+            borderRadius: BorderRadius.circular(25),
+          ),
+          child: const CircularProgressIndicator(),
+        ),
+      ),
+    );
+    await LanguageManager().changeLanguage(langCode);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   Future<void> _loadData() async {
-    final String userId = _resolveUserId();
-
-    Map<String, dynamic> currentUserData = userId.isEmpty
-        ? defaultUserRecord
-        : usersFinalData.firstWhere(
-            (user) => _matchesUserId(user, userId),
-            orElse: () => defaultUserRecord,
-          );
-
-    if (currentUserData.isEmpty && userId.isNotEmpty) {
-      final fetchedUser = await _dataController.fetchUserRecordById(userId);
-      if (fetchedUser != null) {
-        currentUserData = fetchedUser;
-        final int userIndex = usersFinalData.indexWhere(
-          (user) => _matchesUserId(user, userId),
-        );
-        if (userIndex != -1) {
-          usersFinalData[userIndex] = Map<String, dynamic>.from(fetchedUser);
-        }
+    try {
+      final UserModel user = await _userRepo.getUserProfile();
+      await DatabaseHelper().saveUserProfile(user.toJson());
+      if (mounted) {
+        setState(() => _currentUser = user);
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] Failed to load profile from server: $e');
+      final cached = await DatabaseHelper().getUserProfile();
+      if (cached != null && mounted) {
+        setState(() => _currentUser = UserModel.fromJson(cached));
       }
     }
 
-    if (!mounted) return;
-
-    setState(() {
-      _currentUser = UserProfile.fromJson(currentUserData);
-      final inlineOfficeName =
-          (currentUserData['office_name'] ??
-                  currentUserData['officeName'] ??
-                  '')
-              .toString()
-              .trim();
-      _resolvedOfficeName = inlineOfficeName.isEmpty ? null : inlineOfficeName;
-    });
-
-    await _loadOfficeName();
+    await _loadWorkspaceName();
 
     if (mounted) {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadOfficeName() async {
-    final officeId = _currentUser.officeId.trim();
-    if (officeId.isEmpty) {
-      if (!mounted) {
-        _resolvedOfficeName = null;
-        return;
-      }
-      setState(() => _resolvedOfficeName = null);
-      return;
-    }
-
+  Future<void> _loadWorkspaceName() async {
     try {
-      final office = await _dataController.fetchOfficeConnection(
-        officeId: officeId,
-      );
-      final officeName = (office?['office_name'] ?? office?['officeName'] ?? '')
-          .toString()
-          .trim();
-      if (officeName.isEmpty) {
-        return;
+      final prefs = await SharedPreferences.getInstance();
+      final String? selectedId = prefs.getString('selected_workspace_id');
+      final String? cachedJson = prefs.getString('cached_selected_workspace');
+
+      if (cachedJson != null) {
+        final Workspace cached = Workspace.fromJson(jsonDecode(cachedJson));
+        if (selectedId == null || cached.id == selectedId) {
+          if (mounted) setState(() => _workspaceName = cached.workspaceName);
+          return;
+        }
       }
 
-      if (!mounted) {
-        _resolvedOfficeName = officeName;
-        return;
-      }
+      if (selectedId == null || selectedId.isEmpty) return;
 
-      setState(() => _resolvedOfficeName = officeName);
-    } catch (_) {}
+      final List<Workspace> workspaces = await _workspaceRepo.getWorkspaces();
+      if (workspaces.isEmpty) return;
+
+      Workspace? match;
+      for (final workspace in workspaces) {
+        if (workspace.id == selectedId) {
+          match = workspace;
+          break;
+        }
+      }
+      match ??= workspaces.first;
+
+      if (mounted) setState(() => _workspaceName = match!.workspaceName);
+    } catch (e) {
+      debugPrint('[ProfileScreen] Failed to load workspace name: $e');
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -145,49 +267,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (pickedFile != null) {
         final File imageFile = File(pickedFile.path);
         setState(() => _image = imageFile);
-        await _uploadAndSaveProfileImage(imageFile);
+        await _uploadProfileImage(imageFile);
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
   }
 
-  Future<void> _uploadAndSaveProfileImage(File imageFile) async {
-    final String userId = _currentUser.uid.trim();
-    if (userId.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.tr('unable_to_resolve_user_id'))),
-      );
-      return;
-    }
-
+  Future<void> _uploadProfileImage(File imageFile) async {
     setState(() => _isUploadingProfileImage = true);
 
     try {
-      final String imageUrl = await _cloudinaryProfileImageService
-          .uploadProfileImage(
-            imageFile: imageFile,
-            userId: userId,
-            previousImageUrl: _currentUser.profileUrl,
-          );
-
-      await _dataController.updateUserRecord(userId, {'profile_url': imageUrl});
-
-      final int userIndex = usersFinalData.indexWhere(
-        (user) => user['uid']?.toString().trim() == userId,
-      );
-      if (userIndex != -1) {
-        usersFinalData[userIndex]['profile_url'] = imageUrl;
-      }
+      await _profileRepo.updateProfileImage(imageFile);
+      await _loadData();
 
       if (!mounted) return;
-      setState(() {
-        _image = null;
-        _isLoading = true;
-      });
-      _loadData();
-
+      setState(() => _image = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppStrings.tr('profile_image_updated_successfully')),
@@ -207,6 +302,428 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() => _isUploadingProfileImage = false);
       }
     }
+  }
+
+  String _normalizeGender(String? raw) {
+    final normalized = (raw ?? '').trim().toLowerCase();
+    if (normalized == 'male' || normalized == 'female') {
+      return normalized;
+    }
+    return 'other';
+  }
+
+  Future<bool> _saveProfileChanges({
+    required String name,
+    required String gender,
+  }) async {
+    try {
+      final UserModel updated = await _userRepo.updateProfile(
+        name: name,
+        gender: gender,
+      );
+      await DatabaseHelper().saveUserProfile(updated.toJson());
+      if (!mounted) return false;
+      setState(() => _currentUser = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.tr('profile_updated_successfully')),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${AppStrings.tr('profile_update_failed')}: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+  }
+
+  Future<void> _showEditProfileSheet() async {
+    final TextEditingController nameController = TextEditingController(
+      text: _currentUser?.name ?? '',
+    );
+    String selectedGender = _normalizeGender(_currentUser?.gender);
+    bool isSaving = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardTheme.color,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    AppStrings.tr('edit_profile_title'),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    AppStrings.tr('name_label'),
+                    style: const TextStyle(
+                      color: AppColors.textGrey,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Theme.of(context).scaffoldBackgroundColor,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    AppStrings.tr('gender_label'),
+                    style: const TextStyle(
+                      color: AppColors.textGrey,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    children: [
+                      _genderChip(
+                        'male',
+                        selectedGender,
+                        AppStrings.tr('gender_male'),
+                        (value) => setSheetState(() => selectedGender = value),
+                      ),
+                      _genderChip(
+                        'female',
+                        selectedGender,
+                        AppStrings.tr('gender_female'),
+                        (value) => setSheetState(() => selectedGender = value),
+                      ),
+                      _genderChip(
+                        'other',
+                        selectedGender,
+                        AppStrings.tr('gender_other'),
+                        (value) => setSheetState(() => selectedGender = value),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final String name = nameController.text.trim();
+                              if (name.isEmpty) {
+                                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      AppStrings.tr('name_required'),
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+                              setSheetState(() => isSaving = true);
+                              final bool success = await _saveProfileChanges(
+                                name: name,
+                                gender: selectedGender,
+                              );
+                              if (!sheetContext.mounted) return;
+                              setSheetState(() => isSaving = false);
+                              if (success) Navigator.of(sheetContext).pop();
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              AppStrings.tr('save_button'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _genderChip(
+    String value,
+    String selectedValue,
+    String label,
+    ValueChanged<String> onSelected,
+  ) {
+    final bool selected = value == selectedValue;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onSelected(value),
+      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      labelStyle: TextStyle(
+        color: selected
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).textTheme.bodyLarge?.color,
+        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: selected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.grey.shade300,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _performLogout() async {
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        child: Center(
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+            strokeWidth: 3,
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final cachedLogin = await DatabaseHelper().getCachedLogin();
+      final String refreshToken = (cachedLogin?['refresh_token'] ?? '')
+          .toString();
+      if (refreshToken.isNotEmpty) {
+        await _userRepo.logout(refreshToken);
+      }
+    } catch (e) {
+      debugPrint(
+        '[ProfileScreen] Server logout failed, clearing locally anyway: $e',
+      );
+    } finally {
+      // Always wipe local data so the user can't get back into the app
+      // without logging in again, regardless of whether the server call
+      // succeeded.
+      await DatabaseHelper().clearAllUserData();
+    }
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoute.authScreen,
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([ThemeManager(), LanguageManager()]),
+      builder: (context, child) {
+        return Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          appBar: _buildAppBar(context),
+          body: _isLoading
+              ? const ProfileSkeletonLoading()
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 10),
+                      _buildProfileHeader(context),
+                      const SizedBox(height: 22),
+                      _buildSectionLabel(AppStrings.tr('general_section')),
+                      _buildSettingsGroup(context, [
+                        _buildToggleRow(
+                          context,
+                          Icons.dark_mode_rounded,
+                          AppStrings.tr('dark_mode'),
+                          Colors.purple,
+                          ThemeManager().isDarkMode,
+                          (value) => ThemeManager().toggleTheme(value),
+                        ),
+                        _buildDivider(context),
+                        _buildToggleRow(
+                          context,
+                          Icons.notifications_active_rounded,
+                          AppStrings.tr('notification_label'),
+                          Colors.orange,
+                          _isNotificationEnabled,
+                          _isSavingNotification
+                              ? null
+                              : _handleNotificationChange,
+                          isLoading: _isSavingNotification,
+                        ),
+                        _buildDivider(context),
+                        _buildLanguageRow(context),
+                      ]),
+                      const SizedBox(height: 22),
+                      _buildSectionLabel(AppStrings.tr('support_section')),
+                      _buildSettingsGroup(context, [
+                        _buildNavRow(
+                          context,
+                          Icons.edit_outlined,
+                          AppStrings.tr('edit_profile_action'),
+                          Theme.of(context).colorScheme.primary,
+                          onTap: _showEditProfileSheet,
+                        ),
+                        _buildDivider(context),
+                        _buildNavRow(
+                          context,
+                          Icons.headset_mic_rounded,
+                          AppStrings.tr('help_support_title'),
+                          Colors.blue,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoute.helpSupportScreen,
+                          ),
+                        ),
+                        _buildDivider(context),
+                        _buildNavRow(
+                          context,
+                          Icons.auto_awesome_motion_rounded,
+                          AppStrings.tr('about_app'),
+                          Colors.indigo,
+                          trailing: Text(
+                            'v1.2.4',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        _buildDivider(context),
+                        _buildNavRow(
+                          context,
+                          Icons.logout_rounded,
+                          AppStrings.tr('logout_action'),
+                          Colors.red.shade400,
+                          labelColor: Colors.red.shade400,
+                          showChevron: false,
+                          onTap: _confirmLogout,
+                        ),
+                      ]),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+        );
+      },
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      backgroundColor: Theme.of(context).primaryColor,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      title: Text(
+        AppStrings.tr('account_title'),
+        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+      ),
+      iconTheme: Theme.of(context).iconTheme,
+    );
+  }
+
+  Widget _buildOptionItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 30),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showPickerOptions(BuildContext context) {
@@ -273,550 +790,525 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: _buildAppBar(context),
-      body: _isLoading
-          ? const ProfileSkeletonLoading()
-          : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 20),
-                  _buildAvatarSection(),
-                  const SizedBox(height: 15),
-                  Text(
-                    _currentUser.displayName,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).textTheme.bodyLarge?.color,
-                    ),
-                  ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3, end: 0),
-                  Text(
-                    _currentUser.roleTitle,
-                    style: const TextStyle(color: AppColors.textGrey),
-                  ).animate().fadeIn(delay: 300.ms),
-                  const SizedBox(height: 30),
-                  _buildInfoCard(context),
-                  const SizedBox(height: 20),
-                  _buildActionTile(
-                    Icons.lock_outline,
-                    AppStrings.tr('change_password_action'),
-                    context,
-                  ),
-                  const SizedBox(height: 30),
-                  _buildLogoutButton(),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      elevation: 0,
-      title: Text(
-        AppStrings.tr('account_title'),
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8.0),
-          child: IconButton(
-            onPressed: () async {
-              final shouldRefresh = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      SettingsScreen(loginData: widget.loginData),
-                ),
-              );
-              if (!mounted) return;
-              if (shouldRefresh == true) {
-                setState(() => _isLoading = true);
-                _loadData();
-              }
-            },
-            icon: const Icon(Icons.settings_outlined, color: Colors.white),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOptionItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 30),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Theme.of(context).textTheme.bodyLarge?.color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatarSection() {
-    return Center(
-      child: Stack(
-        alignment: Alignment.bottomRight,
-        children: [
-          Container(
-            height: 120,
-            width: 120,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Theme.of(context).cardTheme.color ?? Colors.white,
-                width: 4,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-              color: AppColors.textGrey.withValues(alpha: 0.3),
-            ),
-            child: _image != null
-                ? ClipOval(child: Image.file(_image!, fit: BoxFit.cover))
-                : AppProfileAvatar(
-                    displayName: _currentUser.displayName,
-                    imageUrl: _currentUser.profileUrl,
-                    radius: 60,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    textColor: Theme.of(context).colorScheme.primary,
-                    fontSize: 28,
-                  ),
-          ),
-          if (_isUploadingProfileImage)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black.withOpacity(0.35),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          GestureDetector(
-            onTap: _isUploadingProfileImage
-                ? null
-                : () => _showPickerOptions(context),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: _isUploadingProfileImage
-                  ? Theme.of(context).colorScheme.outline
-                  : Theme.of(context).colorScheme.primary,
-              child: Icon(Icons.camera_alt, size: 18, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    ).animate().scale(duration: 400.ms);
-  }
-
-  Widget _buildInfoCard(BuildContext context) {
-    // final bool isPhoneMissing = _currentUser.phone.trim().isEmpty;
-    // final String phoneValue = isPhoneMissing
-    //     ? AppStrings.tr('not_available')
-    //     : _currentUser.phone;
-    final officeDisplayValue = _resolvedOfficeName?.trim().isNotEmpty == true
-        ? _resolvedOfficeName!.trim()
-        : _currentUser.officeId.trim();
-    final bool isOfficeMissing = officeDisplayValue.isEmpty;
-    final String officeValue = isOfficeMissing
+  Widget _buildProfileHeader(BuildContext context) {
+    final bool isWorkspaceMissing =
+        _workspaceName == null || _workspaceName!.trim().isEmpty;
+    final String workspaceValue = isWorkspaceMissing
         ? AppStrings.tr('not_available')
-        : officeDisplayValue;
-    final bool isDepartmentMissing = _currentUser.departmentId.trim().isEmpty;
-    final String departmentValue = isDepartmentMissing
-        ? AppStrings.tr('not_available')
-        : _currentUser.departmentId.trim();
+        : _workspaceName!.trim();
+    final genderInfo = _genderDisplay(_currentUser?.gender);
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15),
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 18),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // _buildInfoRow(
-          //   context,
-          //   Icons.phone_outlined,
-          //   AppStrings.tr('phone_label'),
-          //   phoneValue,
-          //   valueColor: isPhoneMissing ? Colors.red.shade400 : null,
-          // ),
-          // const Divider(height: 30, thickness: 0.5),
-          _buildInfoRow(
-            context,
-            Icons.apartment_rounded,
-            AppStrings.tr('office_label'),
-            officeValue,
-            valueColor: isOfficeMissing ? Colors.red.shade400 : null,
-          ),
-          const Divider(height: 30, thickness: 0.5),
-          _buildInfoRow(
-            context,
-            Icons.business_center_outlined,
-            AppStrings.tr('department_label'),
-            departmentValue,
-            valueColor: isDepartmentMissing ? Colors.red.shade400 : null,
-          ),
-          // const Divider(height: 30, thickness: 0.5),
-          // _buildTelegramStatus(context),
-          const Divider(height: 30, thickness: 0.5),
-          _buildInfoRow(
-            context,
-            Icons.email_outlined,
-            AppStrings.tr('email_label'),
-            _currentUser.email,
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0);
-  }
-
-  // Widget _buildTelegramStatus(BuildContext context) {
-  //   final bool isConnected = _currentUser.telegram.isConnected;
-  //   final String telegramLabel = isConnected
-  //       ? AppStrings.tr('connected')
-  //       : AppStrings.tr('not_connected');
-  //   return Row(
-  //     children: [
-  //       CircleAvatar(
-  //         backgroundColor: Colors.blue.shade50,
-  //         child: Icon(
-  //           Icons.send,
-  //           color: Theme.of(context).colorScheme.primary,
-  //           size: 20,
-  //         ),
-  //       ),
-  //       const SizedBox(width: 15),
-  //       Expanded(
-  //         child: Column(
-  //           crossAxisAlignment: CrossAxisAlignment.start,
-  //           children: [
-  //             const Text(
-  //               'Telegram',
-  //               style: TextStyle(color: AppColors.textGrey, fontSize: 12),
-  //             ),
-  //             Text(
-  //               telegramLabel,
-  //               maxLines: 1,
-  //               overflow: TextOverflow.ellipsis,
-  //               style: TextStyle(
-  //                 color: isConnected
-  //                     ? Colors.green.shade600
-  //                     : Colors.red.shade400,
-  //                 fontWeight: FontWeight.bold,
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       ),
-  //       if (!isConnected)
-  //         TextButton(
-  //           onPressed: () async {
-  //             await Navigator.pushNamed(
-  //               context,
-  //               AppRoute.telegramConfig,
-  //               arguments: widget.loginData,
-  //             );
-
-  //             if (!mounted) return;
-  //             setState(_loadData);
-  //           },
-  //           style: TextButton.styleFrom(
-  //             backgroundColor: Theme.of(
-  //               context,
-  //             ).colorScheme.primary.withOpacity(0.2),
-  //             shape: RoundedRectangleBorder(
-  //               borderRadius: BorderRadius.circular(10),
-  //             ),
-  //           ),
-  //           child: Text(
-  //             AppStrings.tr('connect_now'),
-  //             style: TextStyle(
-  //               color: Theme.of(context).colorScheme.primary,
-  //               fontWeight: FontWeight.bold,
-  //               fontSize: 12,
-  //             ),
-  //           ),
-  //         ),
-  //     ],
-  //   );
-  // }
-
-  Widget _buildInfoRow(
-    BuildContext context,
-    IconData icon,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
-    return Row(
-      children: [
-        CircleAvatar(
-          backgroundColor: AppColors.textGrey.withValues(alpha: 0.1),
-          child: Icon(
-            icon,
-            color: AppColors.textGrey.withValues(alpha: 0.6),
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                label,
-                style: const TextStyle(color: AppColors.textGrey, fontSize: 12),
-              ),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color:
-                      valueColor ??
-                      Theme.of(context).textTheme.bodyLarge?.color,
+              Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Container(
+                    height: 76,
+                    width: 76,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 2,
+                      ),
+                      color: AppColors.textGrey.withValues(alpha: 0.15),
+                    ),
+                    child: _image != null
+                        ? ClipOval(
+                            child: Image.file(_image!, fit: BoxFit.cover),
+                          )
+                        : AppProfileAvatar(
+                            displayName: _currentUser?.name ?? '',
+                            imageUrl: _currentUser?.avatar ?? '',
+                            radius: 37,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.surface,
+                            textColor: Theme.of(context).colorScheme.primary,
+                            fontSize: 20,
+                          ),
+                  ),
+                  if (_isUploadingProfileImage)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black38,
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  GestureDetector(
+                    onTap: _isUploadingProfileImage
+                        ? null
+                        : () => _showPickerOptions(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color:
+                              Theme.of(context).cardTheme.color ?? Colors.white,
+                          width: 2,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 12,
+                        backgroundColor: _isUploadingProfileImage
+                            ? AppColors.textGrey
+                            : Theme.of(context).colorScheme.primary,
+                        child: const Icon(
+                          Icons.camera_alt,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ).animate().scale(duration: 400.ms),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _currentUser?.name ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          isWorkspaceMissing
+                              ? Icons.warning_amber_rounded
+                              : Icons.apartment_rounded,
+                          size: 13,
+                          color: isWorkspaceMissing
+                              ? Colors.red.shade400
+                              : AppColors.textGrey,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            workspaceValue,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isWorkspaceMissing
+                                  ? Colors.red.shade400
+                                  : AppColors.textGrey,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
+          ).animate().fadeIn().slideY(begin: 0.1, end: 0),
+          const SizedBox(height: 18),
+          Divider(
+            height: 1,
+            color: Theme.of(context).dividerColor.withOpacity(0.1),
+          ),
+          const SizedBox(height: 14),
+          _buildContactLine(Icons.email_outlined, _currentUser?.email ?? ''),
+          const SizedBox(height: 12),
+          _buildContactLine(
+            genderInfo.icon,
+            genderInfo.label,
+            iconColor: genderInfo.color,
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05, end: 0);
+  }
+
+  Widget _buildContactLine(IconData icon, String value, {Color? iconColor}) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: iconColor ?? AppColors.textGrey),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildActionTile(IconData icon, String title, BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardTheme.color,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10),
-          ],
+  ({IconData icon, String label, Color color}) _genderDisplay(String? raw) {
+    switch ((raw ?? '').trim().toLowerCase()) {
+      case 'male':
+        return (
+          icon: Icons.male_rounded,
+          label: AppStrings.tr('gender_male'),
+          color: const Color(0xFF3B82F6),
+        );
+      case 'female':
+        return (
+          icon: Icons.female_rounded,
+          label: AppStrings.tr('gender_female'),
+          color: const Color(0xFFEC4899),
+        );
+      case 'other':
+        return (
+          icon: Icons.person_outline_rounded,
+          label: AppStrings.tr('gender_other'),
+          color: AppColors.secondary,
+        );
+      default:
+        return (
+          icon: Icons.help_outline_rounded,
+          label: AppStrings.tr('gender_unknown'),
+          color: AppColors.textGrey,
+        );
+    }
+  }
+
+  Widget _buildSectionLabel(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 10, top: 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.grey.shade500,
+          fontSize: 13,
+          letterSpacing: 0.2,
+          fontWeight: FontWeight.w700,
         ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.textGrey.withValues(alpha: 0.6)),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.bodyLarge?.color,
-                ),
-              ),
-            ),
-            const Icon(
-              Icons.arrow_forward_ios,
-              size: 14,
-              color: AppColors.textGrey,
-            ),
-          ],
-        ),
-      ).animate().fadeIn(delay: 500.ms),
+      ),
     );
   }
 
-  Widget _buildLogoutButton() {
+  Widget _buildSettingsGroup(BuildContext context, List<Widget> children) {
     return Container(
-      width: double.infinity,
-      height: 55,
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.error),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 12),
+        ],
       ),
-      child: InkWell(
-        onTap: () {
-          showGeneralDialog(
-            context: context,
-            barrierDismissible: true,
-            barrierLabel: '',
-            transitionDuration: const Duration(milliseconds: 200),
-            pageBuilder: (context, anim1, anim2) => const SizedBox(),
-            transitionBuilder: (context, anim1, anim2, child) {
-              return Transform.scale(
-                scale: anim1.value,
-                child: Opacity(
-                  opacity: anim1.value,
-                  child: AlertDialog(
-                    backgroundColor: Theme.of(context).cardTheme.color,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 25,
-                    ),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 30,
-                          backgroundColor: Colors.red.shade50,
-                          child: Icon(
-                            Icons.logout_rounded,
-                            color: Colors.red.shade400,
-                            size: 30,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          AppStrings.tr('confirm_logout_title'),
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          AppStrings.tr('confirm_logout_msg'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(
-                                      color: Colors.grey.shade200,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  AppStrings.tr('cancel_button'),
-                                  style: const TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 15),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  // Clear cached login before logout
-                                  final dbHelper = DatabaseHelper();
-                                  await dbHelper.clearCachedLogin();
+      child: Column(children: children),
+    ).animate().fadeIn(duration: 420.ms);
+  }
 
-                                  if (context.mounted) {
-                                    Navigator.pushNamedAndRemoveUntil(
-                                      context,
-                                      AppRoute.authScreen,
-                                      (route) => false,
-                                    );
-                                  }
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red.shade400,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Text(
-                                  AppStrings.tr('logout_button'),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+  Widget _buildDivider(BuildContext context) {
+    return Divider(
+      height: 1,
+      thickness: 1,
+      color: Theme.of(context).dividerColor.withOpacity(0.1),
+      indent: 70,
+      endIndent: 20,
+    );
+  }
+
+  Widget _buildSoftIcon(BuildContext context, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+
+  Widget _buildToggleRow(
+    BuildContext context,
+    IconData icon,
+    String title,
+    Color color,
+    bool value,
+    ValueChanged<bool>? onChanged, {
+    bool isLoading = false,
+  }) {
+    final ValueChanged<bool>? effectiveOnChanged = isLoading ? null : onChanged;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: effectiveOnChanged == null
+          ? null
+          : () => effectiveOnChanged(!value),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        leading: _buildSoftIcon(context, icon, color),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            color: Theme.of(context).textTheme.bodyLarge?.color,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Theme.of(context).colorScheme.primary,
                   ),
                 ),
-              );
-            },
-          );
-        },
-        borderRadius: BorderRadius.circular(15),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.logout_rounded, color: Colors.red.shade400, size: 20),
-            const SizedBox(width: 10),
-            Text(
-              AppStrings.tr('logout_action'),
-              style: TextStyle(
-                color: Colors.red.shade400,
-                fontWeight: FontWeight.bold,
               ),
+            if (isLoading) const SizedBox(width: 8),
+            Switch.adaptive(
+              value: value,
+              onChanged: effectiveOnChanged,
+              activeColor: Theme.of(context).colorScheme.primary,
             ),
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 600.ms);
+    );
+  }
+
+  Widget _buildLanguageRow(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      leading: _buildSoftIcon(context, Icons.translate_rounded, Colors.teal),
+      title: Text(
+        AppStrings.tr('language_label'),
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+          color: Theme.of(context).textTheme.bodyLarge?.color,
+        ),
+      ),
+      trailing: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).dividerColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildLangChip('ខ្មែរ', 'km', context),
+            _buildLangChip('EN', 'en', context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLangChip(String text, String code, BuildContext context) {
+    final bool active = LanguageManager().locale == code;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: active ? null : () => _handleLanguageChange(code),
+      child: AnimatedContainer(
+        duration: 250.ms,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active
+              ? Theme.of(context).scaffoldBackgroundColor
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: active ? FontWeight.bold : FontWeight.w500,
+            color: active
+                ? (isDark
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.primary)
+                : Colors.grey,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavRow(
+    BuildContext context,
+    IconData icon,
+    String title,
+    Color color, {
+    Widget? trailing,
+    Color? labelColor,
+    bool showChevron = true,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        leading: _buildSoftIcon(context, icon, color),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            color: labelColor ?? Theme.of(context).textTheme.bodyLarge?.color,
+          ),
+        ),
+        trailing:
+            trailing ??
+            (showChevron
+                ? Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.grey.shade400,
+                    size: 24,
+                  )
+                : null),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout() async {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) => const SizedBox(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: anim1.value,
+          child: Opacity(
+            opacity: anim1.value,
+            child: AlertDialog(
+              backgroundColor: Theme.of(context).cardTheme.color,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 25,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.red.shade50,
+                    child: Icon(
+                      Icons.logout_rounded,
+                      color: Colors.red.shade400,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    AppStrings.tr('confirm_logout_title'),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    AppStrings.tr('confirm_logout_msg'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.grey.shade200),
+                            ),
+                          ),
+                          child: Text(
+                            AppStrings.tr('cancel_button'),
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await _performLogout();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade400,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            AppStrings.tr('logout_button'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

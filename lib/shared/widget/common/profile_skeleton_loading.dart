@@ -43,114 +43,103 @@ class _ProfileSkeletonLoadingState extends State<ProfileSkeletonLoading>
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
-              // Avatar skeleton
-              Center(
-                child: Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    _SkeletonCircle(
-                      size: 120,
-                      color: animatedColor,
-                      opacity: pulse,
-                    ),
-                    _SkeletonCircle(
-                      size: 36,
-                      color: animatedColor,
-                      opacity: pulse,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 15),
-              // Name skeleton
-              _SkeletonBox(
-                width: 160,
-                height: 22,
-                color: animatedColor,
-                opacity: pulse,
-                radius: 8,
-              ),
-              const SizedBox(height: 8),
-              // Role title skeleton
-              _SkeletonBox(
-                width: 120,
-                height: 14,
-                color: animatedColor,
-                opacity: pulse,
-                radius: 8,
-              ),
-              const SizedBox(height: 30),
-              // Info card skeleton
+              const SizedBox(height: 10),
+              // Profile header card skeleton
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardTheme.color,
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 15,
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 18,
                     ),
                   ],
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Office row
-                    _buildInfoRowSkeleton(animatedColor, pulse),
-                    const Divider(height: 30, thickness: 0.5),
-                    // Department row
-                    _buildInfoRowSkeleton(animatedColor, pulse),
-                    const Divider(height: 30, thickness: 0.5),
-                    // Email row
-                    _buildInfoRowSkeleton(animatedColor, pulse),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            _SkeletonCircle(
+                              size: 76,
+                              color: animatedColor,
+                              opacity: pulse,
+                            ),
+                            _SkeletonCircle(
+                              size: 22,
+                              color: animatedColor,
+                              opacity: pulse,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SkeletonBox(
+                                width: 140,
+                                height: 18,
+                                color: animatedColor,
+                                opacity: pulse,
+                                radius: 8,
+                              ),
+                              const SizedBox(height: 8),
+                              _SkeletonBox(
+                                width: 100,
+                                height: 13,
+                                color: animatedColor,
+                                opacity: pulse,
+                                radius: 7,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Divider(
+                      height: 1,
+                      color: Theme.of(context).dividerColor.withOpacity(0.1),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildContactLineSkeleton(animatedColor, pulse, 180),
+                    const SizedBox(height: 12),
+                    _buildContactLineSkeleton(animatedColor, pulse, 120),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              // Change password action tile
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardTheme.color,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.01),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    _SkeletonCircle(
-                      size: 24,
-                      color: animatedColor,
-                      opacity: pulse,
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: _SkeletonBox(
-                        width: 120,
-                        height: 14,
-                        color: animatedColor,
-                        opacity: pulse,
-                        radius: 7,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 30),
-              // Logout button skeleton
+              const SizedBox(height: 22),
+              // "General" section
               _SkeletonBox(
-                width: double.infinity,
-                height: 55,
+                width: 90,
+                height: 12,
                 color: animatedColor,
                 opacity: pulse,
-                radius: 15,
+                radius: 6,
               ),
+              const SizedBox(height: 10),
+              _buildGroupSkeleton(animatedColor, pulse, rows: 3, trailingIsSwitch: true),
+              const SizedBox(height: 22),
+              // "Support" section
+              _SkeletonBox(
+                width: 90,
+                height: 12,
+                color: animatedColor,
+                opacity: pulse,
+                radius: 6,
+              ),
+              const SizedBox(height: 10),
+              _buildGroupSkeleton(animatedColor, pulse, rows: 4, trailingIsSwitch: false),
               const SizedBox(height: 40),
             ],
           ),
@@ -159,34 +148,99 @@ class _ProfileSkeletonLoadingState extends State<ProfileSkeletonLoading>
     );
   }
 
-  Widget _buildInfoRowSkeleton(Color color, double opacity) {
+  Widget _buildContactLineSkeleton(Color color, double opacity, double width) {
     return Row(
       children: [
-        _SkeletonCircle(size: 40, color: color, opacity: opacity),
-        const SizedBox(width: 15),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SkeletonBox(
-                width: 60,
-                height: 12,
-                color: color,
-                opacity: opacity,
-                radius: 6,
-              ),
-              const SizedBox(height: 8),
-              _SkeletonBox(
-                width: double.infinity,
-                height: 14,
-                color: color,
-                opacity: opacity,
-                radius: 7,
-              ),
-            ],
-          ),
+        Opacity(
+          opacity: opacity,
+          child: Icon(Icons.circle, size: 18, color: color),
+        ),
+        const SizedBox(width: 10),
+        _SkeletonBox(
+          width: width,
+          height: 14,
+          color: color,
+          opacity: opacity,
+          radius: 7,
         ),
       ],
+    );
+  }
+
+  Widget _buildGroupSkeleton(
+    Color color,
+    double opacity, {
+    required int rows,
+    required bool trailingIsSwitch,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 12),
+        ],
+      ),
+      child: Column(
+        children: List.generate(rows, (index) {
+          final bool isLast = index == rows - 1;
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                child: Row(
+                  children: [
+                    _SkeletonBox(
+                      width: 40,
+                      height: 40,
+                      color: color,
+                      opacity: opacity,
+                      radius: 12,
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _SkeletonBox(
+                        width: 130,
+                        height: 14,
+                        color: color,
+                        opacity: opacity,
+                        radius: 7,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    trailingIsSwitch
+                        ? _SkeletonBox(
+                            width: 40,
+                            height: 22,
+                            color: color,
+                            opacity: opacity,
+                            radius: 12,
+                          )
+                        : _SkeletonBox(
+                            width: 16,
+                            height: 16,
+                            color: color,
+                            opacity: opacity,
+                            radius: 4,
+                          ),
+                  ],
+                ),
+              ),
+              if (!isLast)
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Theme.of(context).dividerColor.withOpacity(0.1),
+                  indent: 70,
+                  endIndent: 20,
+                ),
+            ],
+          );
+        }),
+      ),
     );
   }
 }

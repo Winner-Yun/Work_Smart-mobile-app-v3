@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/features/user/logic/face_scan_logic.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/face_pose_hint_strip.dart';
@@ -69,7 +70,7 @@ class _FaceScanScreenState extends FaceScanLogic {
           fontWeight: FontWeight.bold,
           fontSize: 16,
         ),
-      ),
+      ).animate().fadeIn(duration: 300.ms),
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 8.0),
@@ -110,31 +111,37 @@ class _FaceScanScreenState extends FaceScanLogic {
           if (lastFaceQualityMessage != null) ...[
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: faceQualityPassed
-                    ? Colors.green.withOpacity(0.2)
-                    : Colors.orange.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: faceQualityPassed ? Colors.green : Colors.orange,
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                lastFaceQualityMessage!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: faceQualityPassed ? Colors.green : Colors.orange,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: faceQualityPassed
+                        ? Colors.green.withOpacity(0.2)
+                        : Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: faceQualityPassed ? Colors.green : Colors.orange,
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    lastFaceQualityMessage!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: faceQualityPassed ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                )
+                .animate(key: ValueKey(lastFaceQualityMessage))
+                .fadeIn(duration: 200.ms)
+                .scale(begin: const Offset(0.94, 0.94), duration: 200.ms),
           ],
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 260.ms).slideY(begin: 0.08, end: 0);
   }
 
   Widget _buildOutsideGridFlashOverlay() {
@@ -160,7 +167,8 @@ class _FaceScanScreenState extends FaceScanLogic {
       height: 280,
       child: Stack(
         children: [
-          Container(
+          AnimatedContainer(
+            duration: 250.ms,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
               border: Border.all(

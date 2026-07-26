@@ -191,11 +191,14 @@ mixin _DataLoadingMixin
         _officeConfigData['geofence'] = geofenceMap;
       }
 
-      final cachedPolicyJson = prefs.getString('cached_homepage_policy');
-      if (cachedPolicyJson != null) {
-        final Map<String, dynamic> policyMap = jsonDecode(cachedPolicyJson);
-        currentPolicy = PolicyModel.fromJson(policyMap);
-        _officeConfigData['policy'] = policyMap;
+      if (selectedId != null && selectedId.isNotEmpty) {
+        final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+          selectedId,
+        );
+        if (cachedPolicyMap != null) {
+          currentPolicy = PolicyModel.fromJson(cachedPolicyMap);
+          _officeConfigData['policy'] = cachedPolicyMap;
+        }
       }
     } catch (e) {
       debugPrint('[_loadLocalWorkspaceAndConfig] Error: $e');
@@ -287,10 +290,23 @@ mixin _DataLoadingMixin
             'status': fetchedPolicy.status,
           };
           _officeConfigData['policy'] = policyMap;
-          await prefs.setString(
-            'cached_homepage_policy',
-            jsonEncode(policyMap),
+
+          // Skip the write entirely when the fetched policy is byte-for-byte
+          // identical to what's already cached — this runs on every
+          // homepage load and every pull-to-refresh, so writing unchanged
+          // data each time is a wasted disk write for no benefit.
+          final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+            selectedWorkspaceId,
           );
+          final bool policyChanged =
+              cachedPolicyMap == null ||
+              jsonEncode(cachedPolicyMap) != jsonEncode(policyMap);
+          if (policyChanged) {
+            await DatabaseHelper().saveCachedPolicy(
+              selectedWorkspaceId,
+              policyMap,
+            );
+          }
         }
       }
     } catch (e) {
@@ -315,6 +331,7 @@ mixin _DataLoadingMixin
     await _fetchAndSaveUserProfile();
     await _fetchWorkspaceGeofenceAndPolicy(showRefreshing: true);
     await _loadData();
+    await _fetchMyAttendance();
     await setupOfficeMapObjects();
 
     if (mounted) {
@@ -325,10 +342,16 @@ mixin _DataLoadingMixin
   }
 
   Future<void> _loadAllData() async {
-    await _fetchAndSaveUserProfile();
-
+    // Profile is read from local cache only here — no network round trip.
+    // The network fetch+save (_fetchAndSaveUserProfile) only runs on
+    // explicit pull-to-refresh (see onRefresh below); profile edits already
+    // save to local DB immediately (profile_screens.dart), so the next
+    // homepage load just picks up the cached copy. Without this, every tab
+    // switch back to Home recreated HomePageLogic's state and re-fetched the
+    // profile from the server, adding a network round trip to every visit.
     await _loadLocalWorkspaceAndConfig();
     await _loadData();
+    await _fetchMyAttendance();
 
     if (mounted) {
       setState(() {
@@ -339,9 +362,39 @@ mixin _DataLoadingMixin
     _fetchWorkspaceGeofenceAndPolicy().then((_) async {
       if (mounted) {
         await _loadData();
+        await _fetchMyAttendance();
         await setupOfficeMapObjects();
       }
     });
+  }
+
+  /// Pulls the current user's *today* attendance for the active workspace
+  /// from the backend and replaces the shared in-memory `attendanceRecords`
+  /// list that `currentAttendance` (see attendance_scan_mixin.dart) reads
+  /// from. Scoped to today via `date_filter=today` so the homepage doesn't
+  /// have to page through the user's whole history just to know whether
+  /// they've checked in/out today.
+  Future<void> _fetchMyAttendance() async {
+    final String? workspaceId = currentWorkspace?.id;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    try {
+      final AttendanceModel? today = await _attendanceRepo.getTodayAttendance(
+        workspaceId,
+      );
+      final String uid = currentUser.id;
+      setAttendanceRecords(
+        today == null
+            ? <Map<String, dynamic>>[]
+            : [today.toLegacyMap()..['uid'] = uid],
+      );
+
+      if (mounted) {
+        setState(_syncScanStateFromAttendanceData);
+      }
+    } catch (e) {
+      debugPrint('[_fetchMyAttendance] Error: $e');
+    }
   }
 
   // --- Getters for UI Consumption ---

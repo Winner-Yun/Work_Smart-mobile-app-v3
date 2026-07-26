@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
-import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
-import 'package:flutter_worksmart_app/shared/model/activity_models/leave_record.dart';
+import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:intl/intl.dart';
 
 enum LeaveSortBy {
@@ -24,79 +22,10 @@ class LeaveRemoveModeState {
 }
 
 class LeaveRequestLogic {
-  static final RealtimeDataController _dataController =
-      RealtimeDataController();
-  static final CloudinaryProfileImageService _cloudinaryImageService =
-      CloudinaryProfileImageService();
-
   static bool isApprovedStatus(String status) {
     if (status == 'approved') return true;
     final String localized = AppStrings.tr('status_approved');
     return status.trim().toLowerCase() == localized.trim().toLowerCase();
-  }
-
-  static final List<Map<String, dynamic>> usersFinalData =
-      <Map<String, dynamic>>[];
-
-  /// Initializes user data from Firestore for the given user ID.
-  /// This should be called when the user's leave record screen loads.
-  static Future<void> initializeUserData(String userId) async {
-    final String normalizedUid = userId.trim();
-    if (normalizedUid.isEmpty) return;
-
-    try {
-      final Map<String, dynamic>? userRecord = await _dataController
-          .fetchUserRecordById(normalizedUid);
-      if (userRecord != null) {
-        final int existingIndex = usersFinalData.indexWhere(
-          (user) =>
-              (user['uid'] ?? user['user_id'] ?? user['userId'])
-                  ?.toString()
-                  .trim() ==
-              normalizedUid,
-        );
-        if (existingIndex >= 0) {
-          usersFinalData[existingIndex] = Map<String, dynamic>.from(userRecord);
-        } else {
-          usersFinalData.add(Map<String, dynamic>.from(userRecord));
-        }
-      }
-    } catch (_) {
-      // Silently handle initialization errors
-    }
-  }
-
-  /// Refreshes user data from Firestore to ensure cache consistency.
-  /// This is the 'Source of Truth' - always use this after write operations.
-  static Future<void> refreshUserDataFromSource(String userId) async {
-    final String normalizedUid = userId.trim();
-    if (normalizedUid.isEmpty) return;
-
-    try {
-      final Map<String, dynamic>? userRecord = await _dataController
-          .fetchUserRecordById(normalizedUid);
-      if (userRecord != null) {
-        final int existingIndex = usersFinalData.indexWhere(
-          (user) =>
-              (user['uid'] ?? user['user_id'] ?? user['userId'])
-                  ?.toString()
-                  .trim() ==
-              normalizedUid,
-        );
-        if (existingIndex >= 0) {
-          usersFinalData[existingIndex] = Map<String, dynamic>.from(userRecord);
-        } else {
-          usersFinalData.add(Map<String, dynamic>.from(userRecord));
-        }
-      }
-    } catch (_) {
-      // Silently handle refresh errors
-    }
-  }
-
-  /// Clears all cached user data. Call this on logout or app reset.
-  static void clearUserCache() {
-    usersFinalData.clear();
   }
 
   static bool canRemoveStatus(String status) {
@@ -170,12 +99,21 @@ class LeaveRequestLogic {
     );
   }
 
+  /// Confirms with the user, shows a loading spinner, then runs [onDelete]
+  /// (the caller's actual `LeaveRepository.deleteLeave` REST call). Approved
+  /// requests can't be removed — same rule as before, just no longer
+  /// backed by Firestore.
   static Future<bool> confirmAndDeleteLeave(
     BuildContext context, {
-    required LeaveRecord record,
-    String? userId,
+    required LeaveModel record,
+    required Future<void> Function() onDelete,
     bool showSnackBar = true,
   }) async {
+    if (!canRemoveStatus(record.status)) {
+      await showRemoveNotAllowedDialog(context);
+      return false;
+    }
+
     final bool shouldDelete = await confirmRemoveRequest(context);
     if (!shouldDelete) return false;
 
@@ -185,10 +123,10 @@ class LeaveRequestLogic {
 
     bool removed = false;
     try {
-      removed = await removeLeaveRequest(
-        requestId: record.requestId,
-        userId: userId,
-      );
+      await onDelete();
+      removed = true;
+    } catch (_) {
+      removed = false;
     } finally {
       if (context.mounted &&
           Navigator.of(context, rootNavigator: true).canPop()) {
@@ -196,9 +134,22 @@ class LeaveRequestLogic {
       }
     }
 
-    if (!removed) return false;
+    if (!context.mounted) return removed;
 
-    if (!context.mounted) return true;
+    if (!removed) {
+      if (showSnackBar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppStrings.tr('leave_request_submit_failed'),
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
 
     if (showSnackBar) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -262,7 +213,7 @@ class LeaveRequestLogic {
   }
 
   static LeaveRemoveModeState getLongPressRemoveModeState({
-    required LeaveRecord record,
+    required LeaveModel record,
     required bool isSelectedForRemove,
   }) {
     if (isSelectedForRemove) {
@@ -273,13 +224,13 @@ class LeaveRequestLogic {
     }
 
     return LeaveRemoveModeState(
-      selectedForRemoveRequestId: record.requestId,
+      selectedForRemoveRequestId: record.id,
       isRemoveMode: true,
     );
   }
 
   static LeaveRemoveModeState getTapRemoveModeState({
-    required LeaveRecord record,
+    required LeaveModel record,
     required bool isSelectedForRemove,
   }) {
     if (isSelectedForRemove) {
@@ -290,13 +241,13 @@ class LeaveRequestLogic {
     }
 
     return LeaveRemoveModeState(
-      selectedForRemoveRequestId: record.requestId,
+      selectedForRemoveRequestId: record.id,
       isRemoveMode: true,
     );
   }
 
-  static List<LeaveRecord> filterHistoryByDate(
-    List<LeaveRecord> history,
+  static List<LeaveModel> filterHistoryByDate(
+    List<LeaveModel> history,
     DateTime? selectedDate,
   ) {
     if (selectedDate == null) {
@@ -332,7 +283,7 @@ class LeaveRequestLogic {
   static bool isDateRangeOverlappingExisting({
     required DateTime startDate,
     required DateTime endDate,
-    required List<LeaveRecord> existingRecords,
+    required List<LeaveModel> existingRecords,
   }) {
     final DateTime normalizedStart = normalizeDate(startDate);
     final DateTime normalizedEnd = normalizeDate(endDate);
@@ -402,7 +353,7 @@ class LeaveRequestLogic {
     return null;
   }
 
-  static String formatDateRange(LeaveRecord record) {
+  static String formatDateRange(LeaveModel record) {
     final DateTime startDate = record.startDate;
     final DateTime endDate = record.endDate;
     final DateFormat fullFormatter = DateFormat('dd MMM yyyy');
@@ -504,160 +455,6 @@ class LeaveRequestLogic {
     return shouldDelete == true;
   }
 
-  static Future<bool> submitLeaveRequest({
-    required String userId,
-    required String type,
-    required DateTime startDate,
-    required DateTime endDate,
-    required String reason,
-    String? attachmentUrl,
-  }) async {
-    final String normalizedUid = userId.trim();
-    if (normalizedUid.isEmpty) return false;
-
-    final int userIndex = _findUserIndex(uid: normalizedUid);
-    Map<String, dynamic>? userRecord;
-    List<Map<String, dynamic>> leaveRecords;
-
-    if (userIndex >= 0) {
-      userRecord = usersFinalData[userIndex];
-      leaveRecords = _copyLeaveRecords(userRecord['leave_records']);
-    } else {
-      userRecord = await _dataController.fetchUserRecordById(normalizedUid);
-      if (userRecord == null) return false;
-      leaveRecords = _copyLeaveRecords(userRecord['leave_records']);
-
-      final int insertIndex = usersFinalData.indexWhere(
-        (user) =>
-            (user['uid'] ?? user['user_id'] ?? user['userId'])
-                ?.toString()
-                .trim() ==
-            normalizedUid,
-      );
-      if (insertIndex >= 0) {
-        usersFinalData[insertIndex] = Map<String, dynamic>.from(userRecord);
-      } else {
-        usersFinalData.add(Map<String, dynamic>.from(userRecord));
-      }
-    }
-
-    final String normalizedReason = reason.trim();
-    if (normalizedReason.isEmpty) return false;
-
-    final DateTime normalizedStart = DateTime(
-      startDate.year,
-      startDate.month,
-      startDate.day,
-    );
-    final DateTime normalizedEnd = DateTime(
-      endDate.year,
-      endDate.month,
-      endDate.day,
-    );
-
-    final Map<String, dynamic> request = <String, dynamic>{
-      'request_id': _generateLeaveRequestId(normalizedUid),
-      'type': type,
-      'start_date': normalizedStart.toIso8601String(),
-      'end_date': normalizedEnd.toIso8601String(),
-      'reason': normalizedReason,
-      'status': 'pending',
-    };
-
-    final String? normalizedAttachment = attachmentUrl?.trim();
-    if (normalizedAttachment != null && normalizedAttachment.isNotEmpty) {
-      request['attachment_url'] = normalizedAttachment;
-    }
-
-    leaveRecords.insert(0, request);
-
-    try {
-      await _dataController.upsertUserLeaveRecord(normalizedUid, request);
-      await refreshUserDataFromSource(normalizedUid);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static Future<bool> removeLeaveRequest({
-    required String requestId,
-    String? userId,
-  }) async {
-    int userIndex = _findUserIndex(uid: userId?.trim());
-
-    if (userIndex < 0) {
-      userIndex = _findUserIndex(requestId: requestId);
-    }
-
-    if (userIndex < 0 && (userId?.trim().isNotEmpty ?? false)) {
-      final Map<String, dynamic>? userRecord = await _dataController
-          .fetchUserRecordById(userId!.trim());
-      if (userRecord != null) {
-        final int insertIndex = usersFinalData.indexWhere(
-          (user) =>
-              (user['uid'] ?? user['user_id'] ?? user['userId'])
-                  ?.toString()
-                  .trim() ==
-              userId.trim(),
-        );
-        if (insertIndex >= 0) {
-          usersFinalData[insertIndex] = Map<String, dynamic>.from(userRecord);
-          userIndex = insertIndex;
-        } else {
-          usersFinalData.add(Map<String, dynamic>.from(userRecord));
-          userIndex = usersFinalData.length - 1;
-        }
-      }
-    }
-
-    if (userIndex < 0) return false;
-
-    final String targetUid =
-        usersFinalData[userIndex]['uid']?.toString().trim() ?? '';
-    if (targetUid.isEmpty) return false;
-
-    final List<Map<String, dynamic>> leaveRecords = _copyLeaveRecords(
-      usersFinalData[userIndex]['leave_records'],
-    );
-
-    Map<String, dynamic>? target;
-    for (final item in leaveRecords) {
-      if (item['request_id']?.toString() == requestId) {
-        target = item;
-        break;
-      }
-    }
-
-    if (target != null && target['status'] == 'approved') {
-      return false;
-    }
-
-    if (target != null) {
-      await _cloudinaryImageService.deleteLeaveAttachmentByUrl(
-        target['attachment_url']?.toString(),
-      );
-    }
-
-    final int beforeCount = leaveRecords.length;
-    leaveRecords.removeWhere(
-      (item) => item['request_id']?.toString() == requestId,
-    );
-
-    if (beforeCount == leaveRecords.length) return false;
-
-    try {
-      await _dataController.deleteUserLeaveRecord(targetUid, requestId);
-      await _dataController.updateUserRecord(targetUid, {
-        'leave_records': leaveRecords,
-      });
-      await refreshUserDataFromSource(targetUid);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   static void _showDeleteLoadingDialog(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -693,59 +490,11 @@ class LeaveRequestLogic {
     );
   }
 
-  static int _findUserIndex({String? uid, String? requestId}) {
-    final String? normalizedUid = uid?.trim();
-    if (normalizedUid != null && normalizedUid.isNotEmpty) {
-      final int byUid = usersFinalData.indexWhere(
-        (user) =>
-            (user['uid'] ?? user['user_id'] ?? user['userId'])
-                ?.toString()
-                .trim() ==
-            normalizedUid,
-      );
-      if (byUid >= 0) return byUid;
-    }
-
-    if (requestId != null && requestId.isNotEmpty) {
-      final int byRequest = usersFinalData.indexWhere((user) {
-        final List<Map<String, dynamic>> records = _copyLeaveRecords(
-          user['leave_records'],
-        );
-        return records.any(
-          (item) => item['request_id']?.toString() == requestId,
-        );
-      });
-      if (byRequest >= 0) return byRequest;
-    }
-
-    return -1;
-  }
-
-  static List<Map<String, dynamic>> _copyLeaveRecords(dynamic value) {
-    if (value is! List) {
-      return <Map<String, dynamic>>[];
-    }
-
-    return value
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList();
-  }
-
-  static String _generateLeaveRequestId(String uid) {
-    final String alnumUid = uid.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
-    final String suffix = alnumUid.length > 6
-        ? alnumUid.substring(alnumUid.length - 6)
-        : alnumUid;
-
-    return 'leave_${DateTime.now().microsecondsSinceEpoch}_$suffix';
-  }
-
-  static List<LeaveRecord> sortHistory(
-    List<LeaveRecord> history,
+  static List<LeaveModel> sortHistory(
+    List<LeaveModel> history,
     LeaveSortBy sortBy,
   ) {
-    final List<LeaveRecord> sorted = history.toList();
+    final List<LeaveModel> sorted = history.toList();
 
     switch (sortBy) {
       case LeaveSortBy.dateNewest:

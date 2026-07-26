@@ -690,10 +690,12 @@ class FaceAttendanceVerifier {
     Map<String, dynamic>? faceRecord,
   ) {
     final Map<String, dynamic> enrollment = _asMap(faceRecord);
-    final dynamic rawEmbeddings =
-        enrollment['face_embeddings'] ??
-        enrollment['face_vectors'] ??
-        enrollment['face_embedding_vector'];
+    // 'embeddings' is what GET /face/me returns from the server; the other
+    // keys are what gets written locally at registration time (see
+    // assign_user_face_logic.dart). Both shapes have to be recognized here
+    // since this same extractor reads both a freshly-fetched server record
+    // and the locally cached one.
+    final dynamic rawEmbeddings = enrollment['embeddings'];
     if (rawEmbeddings is! List) {
       return <List<double>>[];
     }

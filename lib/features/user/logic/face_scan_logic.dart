@@ -3,14 +3,21 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
-import 'package:flutter_worksmart_app/core/util/database/realtime_data_controller.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/face_embedding_loading_dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 abstract class FaceScanLogic extends State<FaceScanScreen>
     with WidgetsBindingObserver {
+  /// Special `scanType` value: run the same liveness + face-match pipeline
+  /// as attendance check-in/out, but never save an attendance record. Used
+  /// by the "Update Face" flow to confirm identity before re-registration.
+  static const String scanTypeVerifyOnly = 'verify_face_only';
+
   CameraController? controller;
   List<CameraDescription>? cameras;
   bool isCameraInitialized = false;
@@ -29,8 +36,9 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
   bool _livenessSuccessSnackShown = false;
   Timer? _validationLoopTimer;
   bool _validationTickRunning = false;
-  final RealtimeDataController _realtimeDataController =
-      RealtimeDataController();
+  final AttendanceRepository _attendanceRepo = AttendanceRepository(
+    AttendanceService(),
+  );
   late final FaceAttendanceVerifier _faceAttendanceVerifier;
 
   @override
@@ -436,9 +444,41 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       return;
     }
 
+    final bool isVerifyOnly =
+        (widget.loginData?['scanType'] ?? '').toString().trim() ==
+        scanTypeVerifyOnly;
+    if (isVerifyOnly) {
+      await _completeVerifyOnly();
+      return;
+    }
+
+    final bool isCheckOut =
+        (widget.loginData?['scanType'] ?? 'check_in')
+            .toString()
+            .trim()
+            .toLowerCase() ==
+        'check_out';
+
+    if (mounted) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => FaceEmbeddingLoadingDialog(
+          title:
+              '${AppStrings.tr(isCheckOut ? 'check_in_title' : 'check_in_title')}...',
+          subtitle: AppStrings.tr('attendance_scan_submitting'),
+        ),
+      );
+    }
+
     final Map<String, dynamic>? savedRecord = await _saveAttendanceRecord(
       verification: verification.toMap(),
     );
+
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
     if (savedRecord == null) {
       if (mounted) {
         setState(() {
@@ -543,6 +583,87 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
     await controller?.resumePreview();
   }
 
+  Future<void> _completeVerifyOnly() async {
+    if (!mounted) return;
+
+    setState(() {
+      _livenessPassedInSession = true;
+      isScanning = false;
+      scanProgress = 1;
+      isFlashOverlayEnabled = false;
+      scanMessage = 'Identity verified';
+      activeLivenessAction = null;
+      completedLivenessActions
+        ..clear()
+        ..add(LivenessAction.blink)
+        ..add(LivenessAction.turnLeft)
+        ..add(LivenessAction.turnRight);
+    });
+
+    await controller?.pausePreview();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          icon: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.verified_user_rounded,
+              color: theme.colorScheme.primary,
+              size: 48,
+            ),
+          ),
+          title: Text(
+            AppStrings.tr('identity_verified_title'),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            AppStrings.tr('identity_verified_desc'),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  AppStrings.tr('understood'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
   LivenessAction? _parseLivenessAction(String message) {
     final String normalized = message.toLowerCase();
     if (!normalized.startsWith('liveness:')) {
@@ -574,6 +695,22 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       return null;
     }
 
+    final String workspaceId = (widget.loginData?['workspace_id'] ?? '')
+        .toString()
+        .trim();
+    if (workspaceId.isEmpty) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppStrings.tr('attendance_scan_save_failed')}: unable to resolve workspace',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return null;
+    }
+
     final String rawScanType = (widget.loginData?['scanType'] ?? 'check_in')
         .toString()
         .trim();
@@ -581,20 +718,45 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         ? 'check_out'
         : 'check_in';
 
-    Map<String, dynamic>? latLng;
+    double latitude = 0.0;
+    double longitude = 0.0;
     final dynamic rawLatLng = widget.loginData?['lat_lng'];
     if (rawLatLng is Map) {
-      latLng = Map<String, dynamic>.from(rawLatLng);
+      latitude = (rawLatLng['lat'] as num?)?.toDouble() ?? 0.0;
+      longitude = (rawLatLng['lng'] as num?)?.toDouble() ?? 0.0;
     }
 
+    // `success` already implies liveness passed — the verifier requires the
+    // ordered liveness challenge before it ever reports success.
+    final bool faceVerified = verification?['success'] == true;
+    final bool livenessVerified = faceVerified;
+    final dynamic rawSecurity = verification?['security'];
+    final Map<String, dynamic> security = rawSecurity is Map
+        ? Map<String, dynamic>.from(rawSecurity)
+        : const <String, dynamic>{};
+    final bool mockLocationDetected = security['fake_location'] == true;
+
     try {
-      final savedRecord = await _realtimeDataController.saveAttendanceScan(
-        uid: userId,
-        scanType: scanType,
-        scannedAt: DateTime.now(),
-        latLng: latLng,
-        verification: verification,
-      );
+      final saved = scanType == 'check_out'
+          ? await _attendanceRepo.checkOut(
+              workspaceId,
+              latitude: latitude,
+              longitude: longitude,
+              faceVerified: faceVerified,
+              livenessVerified: livenessVerified,
+              mockLocationDetected: mockLocationDetected,
+            )
+          : await _attendanceRepo.checkIn(
+              workspaceId,
+              latitude: latitude,
+              longitude: longitude,
+              faceVerified: faceVerified,
+              livenessVerified: livenessVerified,
+              mockLocationDetected: mockLocationDetected,
+            );
+
+      final Map<String, dynamic> savedRecord = saved.toLegacyMap();
+      savedRecord['uid'] = userId;
       return savedRecord;
     } catch (e) {
       if (!mounted) return null;

@@ -16,12 +16,14 @@ import 'package:flutter_worksmart_app/core/util/database/office_data.dart';
 import 'package:flutter_worksmart_app/core/util/database/user_data.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
+import 'package:flutter_worksmart_app/features/user/auth/repository/attendance_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/face_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/geofence_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/notification_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/user_repository.dart';
 import 'package:flutter_worksmart_app/features/user/auth/repository/workspace_repository.dart';
+import 'package:flutter_worksmart_app/features/user/auth/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/features/user/auth/service/face_service.dart';
 import 'package:flutter_worksmart_app/features/user/auth/service/geofence_service.dart';
 import 'package:flutter_worksmart_app/features/user/auth/service/notification_service.dart';
@@ -29,6 +31,7 @@ import 'package:flutter_worksmart_app/features/user/auth/service/policy_service.
 import 'package:flutter_worksmart_app/features/user/auth/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/auth/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
+import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
@@ -65,6 +68,8 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
   late final FaceRepository _faceRepo; // Add Face Repo
 
   late final NotificationRepository _notificationRepo;
+
+  late final AttendanceRepository _attendanceRepo;
 
   // Whether a usable face embedding is present in local storage. Always set
   // by directly re-reading DatabaseHelper (see _loadFaceEmbeddingData) —
@@ -220,6 +225,7 @@ abstract class HomePageLogic extends _HomePageLogicState
     _workspaceRepo = WorkspaceRepository(WorkspaceService());
     _faceRepo = FaceRepository(FaceService());
     _notificationRepo = NotificationRepository(NotificationService());
+    _attendanceRepo = AttendanceRepository(AttendanceService());
     loggedInUserId = widget.loginData?['uid'];
     _loadAllData();
     setupOfficeMapObjects();
