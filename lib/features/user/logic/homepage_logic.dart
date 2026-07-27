@@ -32,6 +32,7 @@ import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -198,7 +199,7 @@ abstract class HomePageLogic extends _HomePageLogicState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runStartupPermissionFlow();
-      _detectDeveloperModeOnHomepage();
+      // _detectDeveloperModeOnHomepage();
     });
   }
 

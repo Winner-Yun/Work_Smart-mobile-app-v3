@@ -3,7 +3,21 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_worksmart_app/config/env.dart';
+import 'package:flutter_worksmart_app/features/user/repository/config_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/config_service.dart';
 import 'package:http/http.dart' as http;
+
+class _CloudinaryCredentials {
+  final String cloudName;
+  final String apiKey;
+  final String apiSecret;
+
+  const _CloudinaryCredentials({
+    required this.cloudName,
+    required this.apiKey,
+    required this.apiSecret,
+  });
+}
 
 class CloudinaryProfileImageService {
   static const String _profileFolder = 'worksmart/profile_images';
@@ -11,14 +25,48 @@ class CloudinaryProfileImageService {
   static const String _faceFolder = 'worksmart/face_images';
   static const String _stableFacePublicIdPrefix = 'face';
 
+  final ConfigRepository _configRepo;
+
+  CloudinaryProfileImageService({ConfigRepository? configRepo})
+    : _configRepo = configRepo ?? ConfigRepository(ConfigService());
+
+  /// `cdn_api_key`/`cdn_api_secret` are never cached on-device (see
+  /// AuthLogic._fetchAndCacheAppConfig), so every upload/delete re-fetches
+  /// `/config/data` live. Falls back to `.env` (if present) only if that
+  /// live fetch itself fails, so uploads degrade gracefully instead of
+  /// hard-failing when the backend is briefly unreachable.
+  Future<_CloudinaryCredentials> _resolveCredentials() async {
+    try {
+      final config = await _configRepo.getConfig();
+      if (config.cdnCloudName.isNotEmpty &&
+          config.cdnApiKey.isNotEmpty &&
+          config.cdnApiSecret.isNotEmpty) {
+        return _CloudinaryCredentials(
+          cloudName: config.cdnCloudName.trim(),
+          apiKey: config.cdnApiKey.trim(),
+          apiSecret: config.cdnApiSecret.trim(),
+        );
+      }
+    } catch (_) {
+      // Fall through to the .env-based fallback below.
+    }
+
+    return _CloudinaryCredentials(
+      cloudName: Env.cloudinaryCloudName.trim(),
+      apiKey: Env.cloudinaryApiKey.trim(),
+      apiSecret: Env.cloudinaryApiSecret.trim(),
+    );
+  }
+
   Future<String> uploadProfileImage({
     required File imageFile,
     required String userId,
     String? previousImageUrl,
   }) async {
-    final String cloudName = Env.cloudinaryCloudName.trim();
-    final String apiKey = Env.cloudinaryApiKey.trim();
-    final String apiSecret = Env.cloudinaryApiSecret.trim();
+    final _CloudinaryCredentials creds = await _resolveCredentials();
+    final String cloudName = creds.cloudName;
+    final String apiKey = creds.apiKey;
+    final String apiSecret = creds.apiSecret;
     final String normalizedUserId = _normalizeUserIdSegment(userId);
     final String folder = '$_profileFolder/$normalizedUserId';
     final String expectedPublicId = '$folder/$_stableProfilePublicId';
@@ -115,9 +163,10 @@ class CloudinaryProfileImageService {
     required int sampleIndex,
     String? previousImageUrl,
   }) async {
-    final String cloudName = Env.cloudinaryCloudName.trim();
-    final String apiKey = Env.cloudinaryApiKey.trim();
-    final String apiSecret = Env.cloudinaryApiSecret.trim();
+    final _CloudinaryCredentials creds = await _resolveCredentials();
+    final String cloudName = creds.cloudName;
+    final String apiKey = creds.apiKey;
+    final String apiSecret = creds.apiSecret;
     final String normalizedUserId = _normalizeUserIdSegment(userId);
     final String folder = '$_faceFolder/$normalizedUserId';
     final int timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;

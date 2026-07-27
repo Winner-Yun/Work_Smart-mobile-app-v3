@@ -18,6 +18,34 @@ class AttendanceStatsScreen extends StatefulWidget {
 }
 
 class _AttendanceStatsScreenState extends AttendanceStatsLogic {
+  late final ScrollController _scrollController;
+  bool _scrolledUp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !isRefreshing) {
+      _scrolledUp = true;
+      onRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Guard against empty monthlyStats during initial load
@@ -34,35 +62,106 @@ class _AttendanceStatsScreenState extends AttendanceStatsLogic {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: 10,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildCircularRateChart(currentStats),
-            const SizedBox(height: 15),
-            _buildSummaryStatsRow(currentStats),
-            const SizedBox(height: 20),
-            _buildMonthlyTrendSection(
-              currentStats,
-            ).animate().fadeIn(delay: 200.ms),
-            const SizedBox(height: 20),
-            _buildShiftFilterRow().animate().fadeIn(delay: 200.ms),
-            const SizedBox(height: 20),
-            _buildHistorySectionHeader(
-              currentStats,
-            ).animate().fadeIn(delay: 200.ms),
-            const SizedBox(height: 10),
-            _buildAttendanceHistoryList(),
-            const SizedBox(height: 20),
-          ],
-        ),
+      body: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          SingleChildScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: 10,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCircularRateChart(currentStats),
+                const SizedBox(height: 15),
+                _buildSummaryStatsRow(currentStats),
+                const SizedBox(height: 20),
+                _buildMonthlyTrendSection(
+                  currentStats,
+                ).animate().fadeIn(delay: 200.ms),
+                const SizedBox(height: 20),
+                _buildShiftFilterRow().animate().fadeIn(delay: 200.ms),
+                const SizedBox(height: 20),
+                _buildHistorySectionHeader(
+                  currentStats,
+                ).animate().fadeIn(delay: 200.ms),
+                const SizedBox(height: 10),
+                _buildAttendanceHistoryList(),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+          _buildPullToRefreshIndicator(),
+        ],
       ),
+    );
+  }
+
+  // Matches the homepage/leave-screen overscroll gesture: drag past the top,
+  // the arrow rotates and fills in, release past ~95% to trigger onRefresh
+  // (see _onScroll). Hides once loading/refreshing since SystemLoadingDialog
+  // (shown by onRefresh) takes over the loading feedback from there.
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

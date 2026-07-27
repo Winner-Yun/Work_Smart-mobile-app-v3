@@ -8,6 +8,7 @@ import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,14 +32,67 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
   bool _isRemoveMode = false;
   bool _hasDeletedLeaveRequest = false;
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _scrolledUp = false;
   LeaveSortBy _sortBy = LeaveSortBy.dateNewest;
 
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
     _loadData();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !_isRefreshing) {
+      _scrolledUp = true;
+      _handleRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Scroll-up-to-refresh (matches homepage/leave-management gesture). Shows
+  /// SystemLoadingDialog over the current list instead of the initial-load
+  /// spinner, and always clears via `finally` so a failed fetch can't leave
+  /// the non-dismissible dialog stuck or permanently block further
+  /// pull-to-refresh attempts.
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing || !mounted) return;
+    setState(() => _isRefreshing = true);
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const SystemLoadingDialog(
+        title: 'Refreshing...',
+        subtitle: 'Getting the latest leave data',
+      ),
+    );
+
+    try {
+      await _loadData();
+    } catch (e) {
+      debugPrint('[LeaveAllRequestsScreen] refresh error: $e');
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -55,7 +109,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       if (!mounted) return;
       setState(() {
         _history = leaves.toList()
-          ..sort((a, b) => b.startDate.compareTo(a.startDate));
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         _applyFilter();
         _isLoading = false;
       });
@@ -187,32 +241,125 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
             Expanded(
               child: _isLoading
                   ? _buildLoadingState(context)
-                  : _filteredHistory.isEmpty
-                  ? _buildEmptyState(context)
-                        .animate(key: const ValueKey('leave-empty-state'))
-                        .fadeIn(duration: 260.ms, curve: Curves.easeOut)
-                        .slideY(
-                          begin: 0.06,
-                          end: 0,
-                          duration: 260.ms,
-                          curve: Curves.easeOut,
-                        )
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: _filteredHistory.length,
-                      itemBuilder: (context, index) {
-                        final record = _filteredHistory[index];
-                        return _buildRequestListItem(record)
-                            .animate()
-                            .fadeIn(delay: (80 * index).ms)
-                            .slideY(begin: 0.1, end: 0, curve: Curves.easeOut);
-                      },
+                  : Stack(
+                      alignment: Alignment.topCenter,
+                      children: [
+                        CustomScrollView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          slivers: [
+                            if (_filteredHistory.isEmpty)
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: _buildEmptyState(context)
+                                    .animate(
+                                      key: const ValueKey('leave-empty-state'),
+                                    )
+                                    .fadeIn(
+                                      duration: 260.ms,
+                                      curve: Curves.easeOut,
+                                    )
+                                    .slideY(
+                                      begin: 0.06,
+                                      end: 0,
+                                      duration: 260.ms,
+                                      curve: Curves.easeOut,
+                                    ),
+                              )
+                            else
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  10,
+                                  20,
+                                  20,
+                                ),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate((
+                                    context,
+                                    index,
+                                  ) {
+                                    final record = _filteredHistory[index];
+                                    return _buildRequestListItem(record)
+                                        .animate()
+                                        .fadeIn(delay: (80 * index).ms)
+                                        .slideY(
+                                          begin: 0.1,
+                                          end: 0,
+                                          curve: Curves.easeOut,
+                                        );
+                                  }, childCount: _filteredHistory.length),
+                                ),
+                              ),
+                          ],
+                        ),
+                        _buildPullToRefreshIndicator(),
+                      ],
                     ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // Matches the homepage/leave-screen overscroll gesture.
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || _isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -474,6 +621,18 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
                         color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
+                    if (record.reason.trim().isNotEmpty) ...[
+                      Text(
+                        record.reason,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.textGrey.withValues(alpha: 0.55),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                     Text(
                       subtitle,
                       maxLines: 1,

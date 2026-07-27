@@ -8,12 +8,27 @@ import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 class LeaveService {
   final ApiClient _apiClient = ApiClient();
 
+  /// Backend error bodies are usually `{"message": "..."}`, but on some
+  /// failures (5xx from a proxy, HTML error pages, etc.) the response body
+  /// isn't a Map at all — indexing a String or List with `['message']`
+  /// throws a TypeError that then masks the real error, so this only reads
+  /// the key when [data] is actually a Map.
+  String _extractServerMessage(dynamic data, String? fallback) {
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
+    }
+    if (data is String && data.trim().isNotEmpty) {
+      return data.trim();
+    }
+    return fallback ?? 'Unknown error';
+  }
+
   Future<Map<String, dynamic>> createLeave(
     String workspaceId, {
     required String leaveType,
     required String reason,
     required String startDate,
-    required String endDate,
+    String? endDate,
     File? attachment,
   }) async {
     final String endpoint = ApiEndpoints.createLeave(workspaceId);
@@ -21,7 +36,7 @@ class LeaveService {
       'leave_type': leaveType,
       'reason': reason,
       'start_date': startDate,
-      'end_date': endDate,
+      if (endDate != null) 'end_date': endDate,
       if (attachment != null)
         'attachment': await MultipartFile.fromFile(
           attachment.path,
@@ -66,24 +81,25 @@ class LeaveService {
     );
   }
 
-  /// Lists the current user's leave requests for [workspaceId].
-  ///
-  /// The backend doesn't document a dedicated "list" route yet, so this
-  /// reuses the create collection path (`GET` on the same URL as the `POST`
-  /// in [createLeave]) following the same REST convention as the rest of
-  /// this API. Update this if the real list endpoint differs once the
-  /// backend-side bug mentioned for it is fixed.
+  /// Lists the current user's leave requests for [workspaceId] via the
+  /// dedicated `GET /leave/{workspace_id}/me` endpoint.
   Future<dynamic> fetchMyLeaves(
     String workspaceId, {
     int? page,
     int? limit,
+    String? sortBy,
+    String? sortOrder,
     String? status,
+    String? dateFilter,
   }) async {
-    final String endpoint = ApiEndpoints.createLeave(workspaceId);
+    final String endpoint = ApiEndpoints.myLeaves(workspaceId);
     final Map<String, dynamic> queryParams = {
       if (page != null) 'page': page,
       if (limit != null) 'limit': limit,
+      if (sortBy != null) 'sort_by': sortBy,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (status != null) 'status': status,
+      if (dateFilter != null) 'date_filter': dateFilter,
     };
     debugPrint('[LeaveService] GET $endpoint');
     debugPrint('[LeaveService] Query Params: $queryParams');
@@ -112,7 +128,7 @@ class LeaveService {
       }
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      final serverMessage = e.response?.data?['message'] ?? e.message;
+      final serverMessage = _extractServerMessage(e.response?.data, e.message);
       debugPrint(
         '[LeaveService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
       );
@@ -141,7 +157,7 @@ class LeaveService {
       }
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      final serverMessage = e.response?.data?['message'] ?? e.message;
+      final serverMessage = _extractServerMessage(e.response?.data, e.message);
       debugPrint(
         '[LeaveService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
       );
@@ -182,7 +198,7 @@ class LeaveService {
       }
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      final serverMessage = e.response?.data?['message'] ?? e.message;
+      final serverMessage = _extractServerMessage(e.response?.data, e.message);
       debugPrint(
         '[LeaveService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
       );

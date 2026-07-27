@@ -179,15 +179,15 @@ mixin _DataLoadingMixin
     }
   }
 
-  Future<void> _fetchWorkspaceGeofenceAndPolicy({
-    bool showRefreshing = false,
-  }) async {
-    if (showRefreshing && mounted) {
-      setState(() {
-        isRefreshing = true;
-      });
-    }
-
+  // Pure data fetch — no isRefreshing/isInitialDataLoading side effects.
+  // Every caller controls the loading flag around its *whole* sequence of
+  // awaited calls (see onRefresh/_loadAllData below); this used to flip
+  // isRefreshing off in its own `finally` block as soon as *it* finished,
+  // which hid the skeleton loader while callers still had more awaits left
+  // (e.g. onRefresh's _loadData/_fetchMyAttendance/setupOfficeMapObjects),
+  // so the UI would flash partially-loaded content before the refresh
+  // actually completed.
+  Future<void> _fetchWorkspaceGeofenceAndPolicy() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final selectedWorkspaceId = prefs.getString('selected_workspace_id');
@@ -285,33 +285,49 @@ mixin _DataLoadingMixin
       }
     } catch (e) {
       debugPrint('[_fetchWorkspaceGeofenceAndPolicy] Error: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          isRefreshing = false;
-        });
-      }
     }
   }
 
   Future<void> onRefresh() async {
-    // Show skeleton loader on manual refresh / workspace reload
-    if (mounted) {
-      setState(() {
-        isRefreshing = true;
-      });
-    }
+    // Manual refresh keeps the current page visible behind a modal loading
+    // dialog instead of blanking the screen with the full skeleton loader —
+    // isRefreshing is still tracked (guards re-entrancy / the scroll
+    // listener) but no longer drives any full-page skeleton UI.
+    if (!mounted) return;
 
-    await _fetchAndSaveUserProfile();
-    await _fetchWorkspaceGeofenceAndPolicy(showRefreshing: true);
-    await _loadData();
-    await _fetchMyAttendance();
-    await setupOfficeMapObjects();
+    setState(() {
+      isRefreshing = true;
+    });
 
-    if (mounted) {
-      setState(() {
-        isRefreshing = false;
-      });
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const SystemLoadingDialog(
+        title: 'Refreshing...',
+        subtitle: 'Getting the latest workspace data',
+      ),
+    );
+
+    try {
+      await _fetchAndSaveUserProfile();
+      await _fetchWorkspaceGeofenceAndPolicy();
+      await _loadData();
+      await _fetchMyAttendance();
+      await setupOfficeMapObjects();
+    } catch (e) {
+      debugPrint('[onRefresh] Error: $e');
+    } finally {
+      // Must always dismiss the dialog and clear isRefreshing, even on
+      // failure — the dialog is non-dismissible (barrierDismissible: false,
+      // PopScope(canPop: false)) and _onScroll only allows another
+      // pull-to-refresh while isRefreshing is false, so either one left
+      // unset here permanently locks the homepage.
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() {
+          isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -333,13 +349,53 @@ mixin _DataLoadingMixin
       });
     }
 
-    _fetchWorkspaceGeofenceAndPolicy().then((_) async {
+    // Background refinement pass (server-sourced workspace/geofence/policy,
+    // re-applied attendance, map objects). isRefreshing must always get
+    // cleared here even on failure — _onScroll only allows a pull-to-refresh
+    // while isRefreshing is false, so an uncaught error here would otherwise
+    // permanently disable pull-to-refresh from the very first homepage load.
+    if (mounted) {
+      setState(() {
+        isRefreshing = true;
+      });
+    }
+
+    try {
+      await _fetchWorkspaceGeofenceAndPolicy();
       if (mounted) {
         await _loadData();
         await _fetchMyAttendance();
         await setupOfficeMapObjects();
       }
-    });
+    } catch (e) {
+      debugPrint('[_loadAllData] background refresh error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRefreshing = false;
+        });
+      }
+    }
+  }
+
+  /// Public entry point for callers outside this library (e.g. the homepage
+  /// screen after a face scan returns) to re-sync attendance from the
+  /// backend in place, without navigating away. Shows the same skeleton
+  /// loader used by pull-to-refresh while the request is in flight.
+  Future<void> refreshAttendanceFromServer() async {
+    if (mounted) {
+      setState(() {
+        isRefreshing = true;
+      });
+    }
+
+    await _fetchMyAttendance();
+
+    if (mounted) {
+      setState(() {
+        isRefreshing = false;
+      });
+    }
   }
 
   /// Pulls the current user's *today* attendance for the active workspace

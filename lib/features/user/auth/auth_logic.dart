@@ -7,6 +7,8 @@ import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/repository/config_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/config_service.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -25,6 +27,7 @@ class AuthLogic {
   final ApiClient _apiClient;
   final DatabaseHelper _databaseHelper;
   final GoogleSignIn _googleSignIn;
+  final ConfigRepository _configRepo;
 
   Map<String, dynamic>? _lastAuthenticatedUser;
   bool _googleSignInInitialized = false;
@@ -34,9 +37,11 @@ class AuthLogic {
     ApiClient? apiClient,
     DatabaseHelper? databaseHelper,
     GoogleSignIn? googleSignIn,
+    ConfigRepository? configRepo,
   }) : _apiClient = apiClient ?? ApiClient(),
        _databaseHelper = databaseHelper ?? DatabaseHelper(),
-       _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
+       _googleSignIn = googleSignIn ?? GoogleSignIn.instance,
+       _configRepo = configRepo ?? ConfigRepository(ConfigService());
 
   Future<void> _ensureGoogleSignInInitialized() async {
     if (_googleSignInInitialized) return;
@@ -92,9 +97,6 @@ class AuthLogic {
   }
 
   // ─────────── GOOGLE SIGN-IN ───────────
-
-  // ─────────── GOOGLE SIGN-IN ───────────
-
   Future<bool> handleGoogleSignIn() async {
     try {
       debugPrint('--- STARTING GOOGLE SIGN IN FLOW ---');
@@ -168,6 +170,8 @@ class AuthLogic {
         'employee',
       );
 
+      await _fetchAndCacheAppConfig();
+
       debugPrint('--- LOGIN FLOW COMPLETED SUCCESSFULLY ---');
       return true;
     } on GoogleSignInException catch (e) {
@@ -184,6 +188,25 @@ class AuthLogic {
       debugPrint('UNKNOWN EXCEPTION CAUGHT: $e');
       _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
       return false;
+    }
+  }
+
+  /// Fetches `/config/data` right after login and caches only the two
+  /// values that are safe to keep on-device (CDN cloud name, Google Maps
+  /// key) via the generic settings store. `cdn_api_key`/`cdn_api_secret`
+  /// are deliberately never cached — callers that need them re-fetch the
+  /// config live via [ConfigRepository.getConfig] instead. Best-effort: a
+  /// failure here must not fail the login itself.
+  Future<void> _fetchAndCacheAppConfig() async {
+    try {
+      final config = await _configRepo.getConfig();
+      await _databaseHelper.saveConfig('cdn_cloud_name', config.cdnCloudName);
+      await _databaseHelper.saveConfig(
+        'google_maps_api_key',
+        config.googleMapsApiKey,
+      );
+    } catch (e) {
+      debugPrint('[AuthLogic] Failed to fetch/cache app config: $e');
     }
   }
 
@@ -240,7 +263,7 @@ class AuthLogic {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => FaceEmbeddingLoadingDialog(
+      builder: (_) => SystemLoadingDialog(
         title: AppStrings.tr('connecting_google_title'),
         subtitle: AppStrings.tr('connecting_google_subtitle'),
       ),

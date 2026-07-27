@@ -16,6 +16,7 @@ import 'package:flutter_worksmart_app/features/user/presentation/attendence_scre
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/leave_management_skeleton_loading.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -223,33 +224,61 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   /// list. Guarded by `_isRefreshing`/`_scrolledUp` (see `_onScroll`) so a
   /// single pull gesture only triggers one round of calls instead of firing
   /// again on every scroll event while overscrolled.
+  ///
+  /// Shows SystemLoadingDialog over the current page instead of swapping to
+  /// the full skeleton (see `build`), and always dismisses the dialog /
+  /// clears `_isRefreshing` in `finally` — without that guarantee, an
+  /// uncaught error partway through would leave the non-dismissible dialog
+  /// stuck forever and permanently disable further pull-to-refresh attempts
+  /// (`_onScroll` only fires while `!_isRefreshing`).
   Future<void> _handleRefresh() async {
     if (_isRefreshing) return;
-    if (mounted) setState(() => _isRefreshing = true);
+    if (!mounted) return;
+    setState(() => _isRefreshing = true);
 
-    await _fetchPolicyFromServer();
-    await _loadData();
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const SystemLoadingDialog(
+        title: 'Refreshing...',
+        subtitle: 'Getting the latest leave data',
+      ),
+    );
 
-    if (mounted) setState(() => _isRefreshing = false);
+    try {
+      await _fetchPolicyFromServer();
+      await _loadData();
+    } catch (e) {
+      debugPrint('[LeaveDetailScreen] refresh error: $e');
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   void _applyUserData() {
-    _annualUsed = _sumUsedDays('annual_leave');
-    _sickUsed = _sumUsedDays('sick_leave');
+    _annualUsed = _sumUsedDays(
+      (type) => type.contains('annual') || type.contains('casual'),
+    );
+    _sickUsed = _sumUsedDays((type) => type.contains('sick'));
 
     _annualRatio = (_annualUsed / _annualTotal).clamp(0, 1).toDouble();
     _sickRatio = (_sickUsed / _sickTotal).clamp(0, 1).toDouble();
 
     _history = _leaveRecords.toList()
-      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     _updateAnimations();
   }
 
-  int _sumUsedDays(String type) {
+  int _sumUsedDays(bool Function(String normalizedLeaveType) matches) {
     final approvedRecords = _leaveRecords
         .where(
-          (record) => record.leaveType == type && record.status == 'approved',
+          (record) =>
+              matches(record.leaveType.toLowerCase()) &&
+              record.status == 'approved',
         )
         .toList();
 
@@ -325,7 +354,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(),
-      body: _isLoading || _isRefreshing
+      body: _isLoading
           ? const LeaveManagementSkeletonLoading()
           : Column(
               children: [
@@ -700,6 +729,18 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
                         color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
+                    if (record.reason.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        record.reason,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.textGrey.withValues(alpha: 0.55),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 2),
                     Text(
                       dateLabel,
@@ -938,7 +979,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     return _leaveRecords
         .where(
           (record) =>
-              record.leaveType == 'sick_leave' &&
+              record.leaveType.toLowerCase().contains('sick') &&
               (record.status == 'pending' || record.status == 'approved'),
         )
         .length;

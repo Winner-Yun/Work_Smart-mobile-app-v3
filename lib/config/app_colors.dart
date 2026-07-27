@@ -5,7 +5,7 @@ class AppColors {
   static const Color background = Color(0xFFF5F7F8);
 
   // Primary: AppBar, Main Headers, Primary Buttons
-  static const Color primary = Color(0xFF004C4C);
+  static const Color primary = Color(0xFF38B6FF);
 
   // Secondary: Stars, Ranking Badges
   static const Color secondary = Color(0xFFFFB300);

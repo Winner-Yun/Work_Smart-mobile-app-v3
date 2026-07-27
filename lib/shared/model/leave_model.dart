@@ -8,6 +8,7 @@ class LeaveModel {
   final DateTime endDate;
   final String status;
   final String? attachmentUrl;
+  final DateTime createdAt;
 
   LeaveModel({
     required this.id,
@@ -19,6 +20,7 @@ class LeaveModel {
     required this.endDate,
     required this.status,
     this.attachmentUrl,
+    required this.createdAt,
   });
 
   int get durationInDays => endDate.difference(startDate).inDays + 1;
@@ -47,6 +49,9 @@ class LeaveModel {
         'attachmentUrl',
         'attachment',
       ]),
+      createdAt:
+          _readDate(json, const ['created_at', 'createdAt']) ??
+          DateTime.now(),
     );
   }
 

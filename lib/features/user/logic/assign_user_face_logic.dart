@@ -12,6 +12,7 @@ import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/device/device_info_helper.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
 // Import the newly created Repository and Service
 import 'package:flutter_worksmart_app/features/user/repository/face_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/profile_repository.dart';
@@ -19,7 +20,6 @@ import 'package:flutter_worksmart_app/features/user/repository/user_repository.d
 import 'package:flutter_worksmart_app/features/user/service/face_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/profile_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -357,7 +357,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) => const FaceEmbeddingLoadingDialog(
+        builder: (dialogContext) => const SystemLoadingDialog(
           title: 'Processing Face Vector...',
           subtitle: 'Extracting embeddings & syncing with server',
         ),

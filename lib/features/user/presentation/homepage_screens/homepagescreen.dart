@@ -57,8 +57,9 @@ class _HomePageScreenState extends HomePageLogic {
 
   @override
   Widget build(BuildContext context) {
-    // Show Skeleton Loader unconditionally on initial load OR when refreshing/reloading.
-    if (isInitialDataLoading || isRefreshing) {
+    // Skeleton loader is for the initial load only — manual refresh (onRefresh)
+    // shows a SystemLoadingDialog instead and keeps this page visible underneath.
+    if (isInitialDataLoading) {
       return const Scaffold(body: SafeArea(child: HomePageSkeletonLoading()));
     }
 
@@ -134,55 +135,9 @@ class _HomePageScreenState extends HomePageLogic {
             ? -_scrollController.position.pixels
             : 0.0;
 
+        // While refreshing, SystemLoadingDialog (shown by onRefresh) owns the
+        // loading feedback, so this drag-progress indicator just hides.
         if (overscroll <= 0 || isInitialDataLoading || isRefreshing) {
-          if (isRefreshing) {
-            return Positioned(
-              top: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color:
-                      Theme.of(context).cardTheme.color ??
-                      (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey.shade800
-                          : Colors.white),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Refreshing workspace & rules...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
           return const SizedBox.shrink();
         }
 
@@ -777,8 +732,10 @@ class _HomePageScreenState extends HomePageLogic {
                               applyDatabaseAttendanceScan(
                                 Map<String, dynamic>.from(result),
                               );
+                              await refreshAttendanceFromServer();
                             } else if (result == true) {
                               markMockScanSuccess();
+                              await refreshAttendanceFromServer();
                             }
                           }
                         : null,

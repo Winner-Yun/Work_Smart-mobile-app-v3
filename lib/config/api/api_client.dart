@@ -5,14 +5,19 @@ import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 
 class ApiClient {
   ApiClient._internal() {
+    // No default content-type header here on purpose. Dio's `contentType`
+    // getter always reads straight through to the headers map (regardless
+    // of how it was set), so a base-level 'application/json' header can
+    // never be cleanly overridden per-request — trying to null it out for
+    // multipart uploads throws "Unable to set different values for
+    // `contentType` and the content-type header" instead of clearing it.
+    // Each request sets its own content type instead (see `_optionsFor`).
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
-
         connectTimeout: const Duration(seconds: 60),
         receiveTimeout: const Duration(seconds: 60),
         sendTimeout: ApiConfig.sendTimeout,
-        headers: const {'Content-Type': 'application/json'},
       ),
     );
 
@@ -29,8 +34,14 @@ class ApiClient {
           handler.next(options);
         },
         onError: (DioException error, handler) async {
+          final bool isRefreshCall =
+              error.requestOptions.path == ApiEndpoints.refreshToken;
+          final bool alreadyRetried =
+              error.requestOptions.extra['retriedAfterRefresh'] == true;
+
           if (error.response?.statusCode == 401 &&
-              error.requestOptions.path != ApiEndpoints.refreshToken) {
+              !isRefreshCall &&
+              !alreadyRetried) {
             final success = await _refreshToken();
 
             if (success) {
@@ -39,6 +50,7 @@ class ApiClient {
                   ?.toString();
 
               if (newAccessToken != null) {
+                error.requestOptions.extra['retriedAfterRefresh'] = true;
                 error.requestOptions.headers['Authorization'] =
                     'Bearer $newAccessToken';
                 try {
@@ -67,7 +79,20 @@ class ApiClient {
 
   Dio get client => _dio;
 
-  Future<bool> _refreshToken() async {
+  // Concurrent 401s (e.g. several requests firing together) must share a
+  // single refresh call. Without this, each one reads the same still-cached
+  // refresh token, and if the backend rotates refresh tokens, only the first
+  // call to actually hit the server succeeds — the rest get rejected with
+  // an already-invalidated token and wrongly clear the user's session.
+  Future<bool>? _refreshInFlight;
+
+  Future<bool> _refreshToken() {
+    return _refreshInFlight ??= _performTokenRefresh().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<bool> _performTokenRefresh() async {
     try {
       final cachedLogin = await _databaseHelper.getCachedLogin();
       final String? refreshToken = cachedLogin?['refresh_token']?.toString();
@@ -107,15 +132,30 @@ class ApiClient {
     Object? data,
     Map<String, dynamic>? queryParameters,
   }) {
-    return _dio.patch(endpoint, data: data, queryParameters: queryParameters);
+    return _dio.patch(
+      endpoint,
+      data: data,
+      queryParameters: queryParameters,
+      options: _optionsFor(data),
+    );
   }
 
   Future<Response<dynamic>> post(String endpoint, {Object? data}) {
-    return _dio.post(endpoint, data: data);
+    return _dio.post(endpoint, data: data, options: _optionsFor(data));
+  }
+
+  // FormData (multipart uploads like leave create/update) needs no explicit
+  // content type at all — Dio sets the correct
+  // 'multipart/form-data; boundary=...' header itself once it sees the
+  // request body is FormData, as long as nothing has already claimed the
+  // content-type header. Everything else gets an explicit JSON content type.
+  Options? _optionsFor(Object? data) {
+    if (data is FormData) return null;
+    return Options(contentType: 'application/json');
   }
 
   Future<Response<dynamic>> put(String endpoint, {Object? data}) {
-    return _dio.put(endpoint, data: data);
+    return _dio.put(endpoint, data: data, options: _optionsFor(data));
   }
 
   Future<Response<dynamic>> delete(String endpoint, {Object? data}) {

@@ -8,7 +8,6 @@ const Map<String, String> faceScanStringsEn = {
   'face_pose_blink_eyes': 'Blink eyes',
   'scan_success': 'Scan Success!',
   'switch_workspace': 'Switch Workspace',
-  'notvideo_passed': 'មិនមែនជាវីដេអូទេ។ នេះបញ្ជាក់ថាជាមុខមនុស្សពិត មិនមែនជារូបភាព ឬ វីដេអូទេ។',
 };
 
 const Map<String, String> faceScanStringsKm = {
@@ -19,5 +18,4 @@ const Map<String, String> faceScanStringsKm = {
   'face_pose_right': 'ងាកស្តាំ',
   'face_pose_blink_eyes': 'ព្រិចភ្នែក',
   'scan_success': 'ជោគជ័យ!',
-  'notvideo_passed': '',
 };

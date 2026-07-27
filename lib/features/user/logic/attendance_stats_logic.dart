@@ -7,6 +7,7 @@ import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
@@ -23,6 +24,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
     AttendanceService(),
   );
   bool isLoading = true;
+  bool isRefreshing = false;
 
   final List<String> monthKeys = [
     '',
@@ -115,8 +117,38 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
     }
 
     setState(() {
-      isLoading = false; 
+      isLoading = false;
     });
+  }
+
+  /// Manual refresh — shows a non-dismissible SystemLoadingDialog over the
+  /// current page while `_loadData` re-fetches, rather than dropping back to
+  /// the full skeleton loader (which is initial-load only, gated on
+  /// `monthlyStats.isEmpty`). Wrapped in try/finally so the dialog always
+  /// gets dismissed even if the fetch throws.
+  Future<void> onRefresh() async {
+    if (isRefreshing || !mounted) return;
+    setState(() => isRefreshing = true);
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const SystemLoadingDialog(
+        title: 'Refreshing...',
+        subtitle: 'Getting the latest attendance data',
+      ),
+    );
+
+    try {
+      await _loadData();
+    } catch (e) {
+      debugPrint('[AttendanceStatsLogic] refresh error: $e');
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => isRefreshing = false);
+      }
+    }
   }
 
   /// Calculate monthly attendance percentage based on records

@@ -147,7 +147,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
   Widget _buildStatusHeader(BuildContext context) {
     final statusColor = _getStatusColor(widget.leave.status);
     final statusKey = _getStatusKey(widget.leave.status);
-    final typeIcon = _getLeaveTypeIcon(widget.leave.leaveType);
+    final typeIcon = LeaveRequestLogic.getLeaveIcon(widget.leave.leaveType);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -179,7 +179,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  AppStrings.tr(widget.leave.leaveType),
+                  LeaveRequestLogic.getLeaveTitle(widget.leave.leaveType),
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodyLarge?.color,
                     fontWeight: FontWeight.w700,
@@ -753,7 +753,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
         widget.leave.attachmentUrl!.isNotEmpty;
     if (!hasAttachment) return false;
 
-    return widget.leave.leaveType == 'sick_leave';
+    return widget.leave.leaveType.toLowerCase().contains('sick');
   }
 
   String _getStatusKey(String status) {
@@ -777,17 +777,6 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
       case 'pending':
       default:
         return Colors.orange;
-    }
-  }
-
-  IconData _getLeaveTypeIcon(String type) {
-    switch (type) {
-      case 'annual_leave':
-        return Icons.beach_access;
-      case 'sick_leave':
-        return Icons.local_hospital;
-      default:
-        return Icons.calendar_month;
     }
   }
 }

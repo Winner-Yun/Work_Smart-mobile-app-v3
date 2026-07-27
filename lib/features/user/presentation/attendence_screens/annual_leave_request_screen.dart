@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,14 +25,21 @@ class AnnualLeaveRequestScreen extends StatefulWidget {
 }
 
 class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
-  static const int _annualLeaveTotal = 18;
+  // Fallback total used until the workspace policy (cached locally, or
+  // freshly fetched from the server) provides the real limit.
+  static const int _defaultAnnualLeaveTotal = 18;
+  int _annualLeaveTotal = _defaultAnnualLeaveTotal;
   final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
+  final PolicyRepository _policyRepo = PolicyRepository(PolicyService());
 
   int _annualLeaveUsed = 0;
-  int _annualLeaveRemaining = _annualLeaveTotal;
+  int _annualLeaveRemaining = _defaultAnnualLeaveTotal;
   List<LeaveModel> _myLeaves = <LeaveModel>[];
   String? _workspaceId;
   bool _isLoadingLeaves = true;
+  bool _isRefreshing = false;
+  bool _scrolledUp = false;
+  late final ScrollController _scrollController;
 
   late String? loggedInUserId;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -145,7 +158,68 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
   void initState() {
     super.initState();
     loggedInUserId = _resolveUserId();
-    _loadData();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+    _loadInitialData();
+  }
+
+  /// Resolves the workspace, then waits for the policy to be fetched fresh
+  /// from the server before loading the leave list, so the screen never
+  /// flashes the hardcoded fallback total (or a stale cached value) before
+  /// jumping to the real number a moment later.
+  Future<void> _loadInitialData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
+
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoadingLeaves = false);
+      return;
+    }
+
+    await _fetchPolicyFromServer();
+    await _loadData();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !_isRefreshing) {
+      _scrolledUp = true;
+      _handleRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
+
+  /// Scroll-up-to-refresh for the quota/overlap data backing this form
+  /// (matches the homepage/leave-list gesture). Shows SystemLoadingDialog
+  /// over the form instead of the initial-load spinner, and always clears
+  /// via `finally` so a failed fetch can't leave the non-dismissible dialog
+  /// stuck or permanently block further pull-to-refresh attempts.
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing || !mounted) return;
+    setState(() => _isRefreshing = true);
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const SystemLoadingDialog(
+        title: 'Refreshing...',
+        subtitle: 'Getting the latest leave data',
+      ),
+    );
+
+    try {
+      await _fetchPolicyFromServer();
+      await _loadData();
+    } catch (e) {
+      debugPrint('[AnnualLeaveRequestScreen] refresh error: $e');
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   String _resolveUserId() {
@@ -166,6 +240,15 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       return;
     }
 
+    // Leave totals come from the workspace policy, cached locally — read it
+    // here instead of hardcoding the limit. By the time this runs on
+    // initial load, `_loadInitialData` has already awaited a fresh server
+    // fetch, so this is normally reading back what that fetch just saved.
+    final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+      _workspaceId!,
+    );
+    _applyPolicyLimit(cachedPolicyMap);
+
     try {
       final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
       if (!mounted) return;
@@ -179,6 +262,63 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       // open with an empty list rather than blocking the request form.
       debugPrint('[AnnualLeaveRequestScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoadingLeaves = false);
+    }
+  }
+
+  void _applyPolicyLimit(Map<String, dynamic>? policyMap) {
+    final int? annualLimit = _readPositiveInt(
+      policyMap?['annual_leave_limit'],
+    );
+    if (annualLimit != null) _annualLeaveTotal = annualLimit;
+  }
+
+  int? _readPositiveInt(dynamic value) {
+    final int? parsed = value is num ? value.toInt() : int.tryParse('$value');
+    return (parsed != null && parsed > 0) ? parsed : null;
+  }
+
+  /// Fetches the policy fresh from the server, updates the local cache
+  /// (skipping the write if nothing changed), and refreshes the on-screen
+  /// total. Best-effort: falls back to whatever is cached on failure.
+  Future<void> _fetchPolicyFromServer() async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    try {
+      final fetchedPolicy = await _policyRepo.getPolicy(workspaceId);
+      final policyMap = {
+        'id': fetchedPolicy.id,
+        'workspace_id': fetchedPolicy.workspaceId,
+        'name': fetchedPolicy.name,
+        'work_start_time': fetchedPolicy.workStartTime,
+        'work_end_time': fetchedPolicy.workEndTime,
+        'check_in_start': fetchedPolicy.checkInStart,
+        'check_out_start': fetchedPolicy.checkOutStart,
+        'late_buffer_minutes': fetchedPolicy.lateBufferMinutes,
+        'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
+        'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
+        'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+        'status': fetchedPolicy.status,
+      };
+
+      final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+        workspaceId,
+      );
+      final bool policyChanged =
+          cachedPolicyMap == null ||
+          jsonEncode(cachedPolicyMap) != jsonEncode(policyMap);
+      if (policyChanged) {
+        await DatabaseHelper().saveCachedPolicy(workspaceId, policyMap);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _applyPolicyLimit(policyMap);
+        _recalculateQuota();
+      });
+    } catch (e) {
+      // Policy refresh is best-effort; fall back to whatever is cached.
+      debugPrint('[AnnualLeaveRequestScreen] Failed to refresh policy: $e');
     }
   }
 
@@ -269,18 +409,22 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     );
 
     bool submitted = false;
+    Object? submitError;
     try {
       await _leaveRepo.createLeave(
         workspaceId,
-        leaveType: 'annual_leave',
+        leaveType: 'annual',
         reason: _reasonController.text.trim(),
-        startDate: normalizedStart.toIso8601String(),
-        endDate: normalizedEnd.toIso8601String(),
+        startDate: DateFormat('yyyy-MM-dd').format(normalizedStart),
+        endDate: _isDurationRequest
+            ? DateFormat('yyyy-MM-dd').format(normalizedEnd)
+            : null,
       );
       submitted = true;
     } catch (e) {
       debugPrint('[AnnualLeaveRequestScreen] Submit failed: $e');
       submitted = false;
+      submitError = e;
     }
 
     if (!mounted) return;
@@ -293,7 +437,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            AppStrings.tr('leave_request_submit_failed'),
+            '${AppStrings.tr('leave_request_submit_failed')}: ${_describeError(submitError)}',
             style: TextStyle(color: Colors.white),
           ),
           backgroundColor: Colors.red,
@@ -318,7 +462,13 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
   @override
   void dispose() {
     _reasonController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  String _describeError(Object? error) {
+    return error.toString().replaceFirst('Exception: ', '');
   }
 
   @override
@@ -328,46 +478,117 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       appBar: _buildAppBar(context),
       body: _isLoadingLeaves
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Form(
-                key: _formKey,
-                autovalidateMode: _showValidationErrors
-                    ? AutovalidateMode.always
-                    : AutovalidateMode.disabled,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildBalanceCard(context),
-                    const SizedBox(height: 25),
-                    _buildSectionTitle(AppStrings.tr('select_date'), context),
-                    const SizedBox(height: 15),
-                    _buildRequestTypeToggle(context),
-                    const SizedBox(height: 12),
-                    Text(
-                      AppStrings.tr('annual_leave_date_mode_hint'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(
+          : Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.all(20),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: _showValidationErrors
+                        ? AutovalidateMode.always
+                        : AutovalidateMode.disabled,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildBalanceCard(context),
+                        const SizedBox(height: 25),
+                        _buildSectionTitle(
+                          AppStrings.tr('select_date'),
                           context,
-                        ).textTheme.bodySmall?.color?.withOpacity(0.75),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _buildDateRangePicker(context),
-                    const SizedBox(height: 25),
-                    _buildSectionTitle(
-                      AppStrings.tr('reason_for_request'),
-                      context,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildTextArea(context),
-                    const SizedBox(height: 40),
-                    _buildSubmitButton(context),
-                  ],
-                ).animate().fadeIn(duration: 500.ms),
+                        ),
+                        const SizedBox(height: 15),
+                        _buildRequestTypeToggle(context),
+                        const SizedBox(height: 12),
+                        Text(
+                          AppStrings.tr('annual_leave_date_mode_hint'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.color?.withOpacity(0.75),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildDateRangePicker(context),
+                        const SizedBox(height: 25),
+                        _buildSectionTitle(
+                          AppStrings.tr('reason_for_request'),
+                          context,
+                        ),
+                        const SizedBox(height: 15),
+                        _buildTextArea(context),
+                        const SizedBox(height: 40),
+                        _buildSubmitButton(context),
+                      ],
+                    ).animate().fadeIn(duration: 500.ms),
+                  ),
+                ),
+                _buildPullToRefreshIndicator(),
+              ],
+            ),
+    );
+  }
+
+  // Matches the homepage/leave-screen overscroll gesture.
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || _isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
               ),
             ),
+          ),
+        );
+      },
     );
   }
 

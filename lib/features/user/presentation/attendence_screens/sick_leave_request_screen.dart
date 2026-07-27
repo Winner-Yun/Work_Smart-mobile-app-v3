@@ -1,11 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,16 +25,23 @@ class SickLeaveRequestScreen extends StatefulWidget {
 }
 
 class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
-  static const int _sickLeaveTotal = 5;
+  // Fallback total used until the workspace policy (cached locally, or
+  // freshly fetched from the server) provides the real limit.
+  static const int _defaultSickLeaveTotal = 5;
+  int _sickLeaveTotal = _defaultSickLeaveTotal;
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
   late final DateTime _selectedDate;
   final LeaveRepository _leaveRepo = LeaveRepository(LeaveService());
+  final PolicyRepository _policyRepo = PolicyRepository(PolicyService());
 
   int _sickLeaveUsed = 0;
-  int _sickLeaveRemaining = _sickLeaveTotal;
+  int _sickLeaveRemaining = _defaultSickLeaveTotal;
   List<LeaveModel> _myLeaves = <LeaveModel>[];
   String? _workspaceId;
   bool _isLoadingLeaves = true;
+  bool _isRefreshing = false;
+  bool _scrolledUp = false;
+  late final ScrollController _scrollController;
 
   late String? loggedInUserId;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -60,7 +72,68 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     super.initState();
     loggedInUserId = _resolveUserId();
     _selectedDate = DateTime.now();
-    _loadData();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+    _loadInitialData();
+  }
+
+  /// Resolves the workspace, then waits for the policy to be fetched fresh
+  /// from the server before loading the leave list, so the screen never
+  /// flashes the hardcoded fallback total (or a stale cached value) before
+  /// jumping to the real number a moment later.
+  Future<void> _loadInitialData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
+
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoadingLeaves = false);
+      return;
+    }
+
+    await _fetchPolicyFromServer();
+    await _loadData();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !_isRefreshing) {
+      _scrolledUp = true;
+      _handleRefresh();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
+
+  /// Scroll-up-to-refresh for the quota/overlap data backing this form
+  /// (matches the homepage/leave-list gesture). Shows SystemLoadingDialog
+  /// over the form instead of the initial-load spinner, and always clears
+  /// via `finally` so a failed fetch can't leave the non-dismissible dialog
+  /// stuck or permanently block further pull-to-refresh attempts.
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing || !mounted) return;
+    setState(() => _isRefreshing = true);
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const SystemLoadingDialog(
+        title: 'Refreshing...',
+        subtitle: 'Getting the latest leave data',
+      ),
+    );
+
+    try {
+      await _fetchPolicyFromServer();
+      await _loadData();
+    } catch (e) {
+      debugPrint('[SickLeaveRequestScreen] refresh error: $e');
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   String _resolveUserId() {
@@ -81,6 +154,15 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       return;
     }
 
+    // Leave totals come from the workspace policy, cached locally — read it
+    // here instead of hardcoding the limit. By the time this runs on
+    // initial load, `_loadInitialData` has already awaited a fresh server
+    // fetch, so this is normally reading back what that fetch just saved.
+    final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+      _workspaceId!,
+    );
+    _applyPolicyLimit(cachedPolicyMap);
+
     try {
       final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
       if (!mounted) return;
@@ -94,6 +176,61 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       // open with an empty list rather than blocking the request form.
       debugPrint('[SickLeaveRequestScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoadingLeaves = false);
+    }
+  }
+
+  void _applyPolicyLimit(Map<String, dynamic>? policyMap) {
+    final int? sickLimit = _readPositiveInt(policyMap?['sick_leave_limit']);
+    if (sickLimit != null) _sickLeaveTotal = sickLimit;
+  }
+
+  int? _readPositiveInt(dynamic value) {
+    final int? parsed = value is num ? value.toInt() : int.tryParse('$value');
+    return (parsed != null && parsed > 0) ? parsed : null;
+  }
+
+  /// Fetches the policy fresh from the server, updates the local cache
+  /// (skipping the write if nothing changed), and refreshes the on-screen
+  /// total. Best-effort: falls back to whatever is cached on failure.
+  Future<void> _fetchPolicyFromServer() async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    try {
+      final fetchedPolicy = await _policyRepo.getPolicy(workspaceId);
+      final policyMap = {
+        'id': fetchedPolicy.id,
+        'workspace_id': fetchedPolicy.workspaceId,
+        'name': fetchedPolicy.name,
+        'work_start_time': fetchedPolicy.workStartTime,
+        'work_end_time': fetchedPolicy.workEndTime,
+        'check_in_start': fetchedPolicy.checkInStart,
+        'check_out_start': fetchedPolicy.checkOutStart,
+        'late_buffer_minutes': fetchedPolicy.lateBufferMinutes,
+        'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
+        'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
+        'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+        'status': fetchedPolicy.status,
+      };
+
+      final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+        workspaceId,
+      );
+      final bool policyChanged =
+          cachedPolicyMap == null ||
+          jsonEncode(cachedPolicyMap) != jsonEncode(policyMap);
+      if (policyChanged) {
+        await DatabaseHelper().saveCachedPolicy(workspaceId, policyMap);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _applyPolicyLimit(policyMap);
+        _recalculateQuota();
+      });
+    } catch (e) {
+      // Policy refresh is best-effort; fall back to whatever is cached.
+      debugPrint('[SickLeaveRequestScreen] Failed to refresh policy: $e');
     }
   }
 
@@ -195,19 +332,20 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     });
 
     bool submitted = false;
+    Object? submitError;
     try {
       await _leaveRepo.createLeave(
         workspaceId,
-        leaveType: 'sick_leave',
+        leaveType: 'sick',
         reason: _reasonController.text.trim(),
-        startDate: _selectedDate.toIso8601String(),
-        endDate: _selectedDate.toIso8601String(),
+        startDate: DateFormat('yyyy-MM-dd').format(_selectedDate),
         attachment: File(_pickedFile!.path),
       );
       submitted = true;
     } catch (e) {
       debugPrint('[SickLeaveRequestScreen] Submit failed: $e');
       submitted = false;
+      submitError = e;
     }
 
     if (!mounted) return;
@@ -220,7 +358,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            AppStrings.tr('leave_request_submit_failed'),
+            '${AppStrings.tr('leave_request_submit_failed')}: ${_describeError(submitError)}',
             style: TextStyle(color: Colors.white),
           ),
           backgroundColor: Colors.red,
@@ -245,7 +383,13 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
   @override
   void dispose() {
     _reasonController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  String _describeError(Object? error) {
+    return error.toString().replaceFirst('Exception: ', '');
   }
 
   bool _isAllowedAttachmentFile(String fileName) {
@@ -262,57 +406,131 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       appBar: _buildAppBar(context),
       body: _isLoadingLeaves
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Form(
-                key: _formKey,
-                autovalidateMode: _showValidationErrors
-                    ? AutovalidateMode.always
-                    : AutovalidateMode.disabled,
-                child: Column(
-                  children: [
-                    _buildTopInfoCard(context),
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSectionTitle(
-                            AppStrings.tr('request_details'),
-                            context,
+          : Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: _showValidationErrors
+                        ? AutovalidateMode.always
+                        : AutovalidateMode.disabled,
+                    child: Column(
+                      children: [
+                        _buildTopInfoCard(context),
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionTitle(
+                                AppStrings.tr('request_details'),
+                                context,
+                              ),
+                              const SizedBox(height: 15),
+                              _buildInputCard(context, [
+                                _buildLabel(
+                                  AppStrings.tr('reason_for_sickness'),
+                                  context,
+                                ),
+                                _buildTextField(
+                                  context: context,
+                                  hint: AppStrings.tr('sickness_reason_hint'),
+                                  icon: Icons.edit_note,
+                                  controller: _reasonController,
+                                ),
+                                const SizedBox(height: 20),
+                                _buildLabel(
+                                  AppStrings.tr('leave_date'),
+                                  context,
+                                ),
+                                _buildAutoSelectedDateField(context),
+                              ]),
+                              const SizedBox(height: 25),
+                              _buildSectionTitle(
+                                AppStrings.tr('medical_documents'),
+                                context,
+                              ),
+                              const SizedBox(height: 15),
+                              _buildUploadArea(context),
+                              const SizedBox(height: 40),
+                              _buildSubmitButton(context),
+                              const SizedBox(height: 20),
+                            ],
+                          ).animate().fadeIn(duration: 600.ms).slideY(
+                            begin: 0.1,
+                            end: 0,
                           ),
-                          const SizedBox(height: 15),
-                          _buildInputCard(context, [
-                            _buildLabel(
-                              AppStrings.tr('reason_for_sickness'),
-                              context,
-                            ),
-                            _buildTextField(
-                              context: context,
-                              hint: AppStrings.tr('sickness_reason_hint'),
-                              icon: Icons.edit_note,
-                              controller: _reasonController,
-                            ),
-                            const SizedBox(height: 20),
-                            _buildLabel(AppStrings.tr('leave_date'), context),
-                            _buildAutoSelectedDateField(context),
-                          ]),
-                          const SizedBox(height: 25),
-                          _buildSectionTitle(
-                            AppStrings.tr('medical_documents'),
-                            context,
-                          ),
-                          const SizedBox(height: 15),
-                          _buildUploadArea(context),
-                          const SizedBox(height: 40),
-                          _buildSubmitButton(context),
-                          const SizedBox(height: 20),
-                        ],
-                      ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1, end: 0),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                ),
+                _buildPullToRefreshIndicator(),
+              ],
+            ),
+    );
+  }
+
+  // Matches the homepage/leave-screen overscroll gesture.
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || _isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
                 ),
               ),
             ),
+          ),
+        );
+      },
     );
   }
 

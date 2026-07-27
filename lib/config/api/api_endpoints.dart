@@ -37,4 +37,8 @@ class ApiEndpoints {
   // LEAVE
   static String createLeave(String workspaceId) => '/leave/$workspaceId/leave';
   static String leaveById(String leaveId) => '/leave/$leaveId';
+  static String myLeaves(String workspaceId) => '/leave/$workspaceId/me';
+
+  // CONFIG
+  static const String configData = '/config/data';
 }

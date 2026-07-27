@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 
-/// Generic blocking "system is working" dialog: the app logo centered inside
-/// a rotating ring, with a title/subtitle underneath. Reused anywhere the
-/// app needs to tell the user "please wait" during a network/processing
-/// step (face embedding upload, attendance sync, Google re-auth, ...).
-class FaceEmbeddingLoadingDialog extends StatelessWidget {
+class SystemLoadingDialog extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const FaceEmbeddingLoadingDialog({
+  const SystemLoadingDialog({
     super.key,
     this.title = 'Processing...',
     this.subtitle = 'Please wait a moment',

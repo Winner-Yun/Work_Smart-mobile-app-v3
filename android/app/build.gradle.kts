@@ -7,7 +7,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Resolves in order: OS environment variable (so CI/build machines can
+// supply secrets without a checked-in `.env`) -> `.env` file if present ->
+// empty string. Never throws, even if `.env` doesn't exist, so the build
+// still succeeds without it (the map just won't authorize at runtime).
 fun loadEnvValue(name: String): String {
+    System.getenv(name)?.let { if (it.isNotBlank()) return it }
+
     val envFile = rootProject.file("../.env")
     if (!envFile.exists()) return ""
 

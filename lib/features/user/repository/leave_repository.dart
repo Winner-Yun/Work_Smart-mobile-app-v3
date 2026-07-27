@@ -13,7 +13,7 @@ class LeaveRepository {
     required String leaveType,
     required String reason,
     required String startDate,
-    required String endDate,
+    String? endDate,
     File? attachment,
   }) async {
     final json = await _service.createLeave(
@@ -57,13 +57,19 @@ class LeaveRepository {
     String workspaceId, {
     int? page,
     int? limit,
+    String? sortBy,
+    String? sortOrder,
     String? status,
+    String? dateFilter,
   }) async {
     final dynamic raw = await _service.fetchMyLeaves(
       workspaceId,
       page: page,
       limit: limit,
+      sortBy: sortBy,
+      sortOrder: sortOrder,
       status: status,
+      dateFilter: dateFilter,
     );
 
     List<dynamic>? rawList;

@@ -129,14 +129,16 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       setState(() {
         _leaveRecords = leaves;
 
-        _annualUsed = _sumUsedDays('annual_leave');
-        _sickUsed = _sumUsedDays('sick_leave');
+        _annualUsed = _sumUsedDays(
+          (type) => type.contains('annual') || type.contains('casual'),
+        );
+        _sickUsed = _sumUsedDays((type) => type.contains('sick'));
 
         _annualRemaining = (_annualTotal - _annualUsed).clamp(0, _annualTotal);
         _sickRemaining = (_sickTotal - _sickUsed).clamp(0, _sickTotal);
 
         _history = _leaveRecords.toList()
-          ..sort((a, b) => b.startDate.compareTo(a.startDate));
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         _isLoading = false;
       });
     } catch (e) {
@@ -220,10 +222,12 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     if (mounted) setState(() => _isRefreshing = false);
   }
 
-  int _sumUsedDays(String type) {
+  int _sumUsedDays(bool Function(String normalizedLeaveType) matches) {
     return _leaveRecords
         .where(
-          (record) => record.leaveType == type && record.status == 'approved',
+          (record) =>
+              matches(record.leaveType.toLowerCase()) &&
+              record.status == 'approved',
         )
         .fold(0, (sum, record) => sum + record.durationInDays);
   }
@@ -299,7 +303,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       final activeSickRequests = _leaveRecords
           .where(
             (record) =>
-                record.leaveType == 'sick_leave' &&
+                record.leaveType.toLowerCase().contains('sick') &&
                 (record.status == 'pending' || record.status == 'approved'),
           )
           .length;
@@ -605,7 +609,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     final activeSickRequests = _leaveRecords
         .where(
           (record) =>
-              record.leaveType == 'sick_leave' &&
+              record.leaveType.toLowerCase().contains('sick') &&
               (record.status == 'pending' || record.status == 'approved'),
         )
         .length;
@@ -835,6 +839,18 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
                         color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
+                    if (record.reason.trim().isNotEmpty) ...[
+                      Text(
+                        record.reason,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.withValues(alpha: 0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                     Text(
                       subtitle,
                       maxLines: 1,

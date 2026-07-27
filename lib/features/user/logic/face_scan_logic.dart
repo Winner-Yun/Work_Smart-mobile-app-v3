@@ -33,7 +33,6 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
   LivenessAction? activeLivenessAction;
   final Set<LivenessAction> completedLivenessActions = <LivenessAction>{};
   bool _livenessPassedInSession = false;
-  bool _livenessSuccessSnackShown = false;
   Timer? _validationLoopTimer;
   bool _validationTickRunning = false;
   final AttendanceRepository _attendanceRepo = AttendanceRepository(
@@ -306,18 +305,6 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
                   ) &&
                   !_livenessPassedInSession) {
                 _livenessPassedInSession = true;
-                if (!_livenessSuccessSnackShown && mounted) {
-                  _livenessSuccessSnackShown = true;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppStrings.tr('notvideo_passed'),
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                    ),
-                  );
-                }
               }
 
               if (!mounted) return;
@@ -417,7 +404,6 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         setState(() {
           if (isNotUser) {
             _livenessPassedInSession = false;
-            _livenessSuccessSnackShown = false;
           }
           isScanning = false;
           scanProgress = 0;
@@ -463,7 +449,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) => FaceEmbeddingLoadingDialog(
+        builder: (dialogContext) => SystemLoadingDialog(
           title:
               '${AppStrings.tr(isCheckOut ? 'check_in_title' : 'check_in_title')}...',
           subtitle: AppStrings.tr('attendance_scan_submitting'),

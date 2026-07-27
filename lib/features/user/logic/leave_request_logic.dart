@@ -167,25 +167,25 @@ class LeaveRequestLogic {
   }
 
   static String getLeaveTitle(String type) {
-    switch (type) {
-      case 'annual_leave':
-        return AppStrings.tr('annual_leave');
-      case 'sick_leave':
-        return AppStrings.tr('sick_leave');
-      default:
-        return type.replaceAll('_', ' ');
+    final String normalized = type.toLowerCase();
+    if (normalized.contains('annual') || normalized.contains('casual')) {
+      return AppStrings.tr('annual_leave');
     }
+    if (normalized.contains('sick')) {
+      return AppStrings.tr('sick_leave');
+    }
+    return type.replaceAll('_', ' ');
   }
 
   static IconData getLeaveIcon(String type) {
-    switch (type) {
-      case 'annual_leave':
-        return Icons.beach_access_outlined;
-      case 'sick_leave':
-        return Icons.medical_services_outlined;
-      default:
-        return Icons.calendar_today_outlined;
+    final String normalized = type.toLowerCase();
+    if (normalized.contains('annual') || normalized.contains('casual')) {
+      return Icons.beach_access_outlined;
     }
+    if (normalized.contains('sick')) {
+      return Icons.medical_services_outlined;
+    }
+    return Icons.calendar_today_outlined;
   }
 
   static String getStatusText(String status) {
@@ -498,17 +498,17 @@ class LeaveRequestLogic {
 
     switch (sortBy) {
       case LeaveSortBy.dateNewest:
-        sorted.sort((a, b) => b.startDate.compareTo(a.startDate));
+        sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
       case LeaveSortBy.dateOldest:
-        sorted.sort((a, b) => a.startDate.compareTo(b.startDate));
+        sorted.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         break;
       case LeaveSortBy.statusPending:
         sorted.sort((a, b) {
           final aPending = a.status == 'pending' ? 0 : 1;
           final bPending = b.status == 'pending' ? 0 : 1;
           if (aPending != bPending) return aPending.compareTo(bPending);
-          return b.startDate.compareTo(a.startDate);
+          return b.createdAt.compareTo(a.createdAt);
         });
         break;
       case LeaveSortBy.statusApproved:
@@ -516,7 +516,7 @@ class LeaveRequestLogic {
           final aApproved = a.status == 'approved' ? 0 : 1;
           final bApproved = b.status == 'approved' ? 0 : 1;
           if (aApproved != bApproved) return aApproved.compareTo(bApproved);
-          return b.startDate.compareTo(a.startDate);
+          return b.createdAt.compareTo(a.createdAt);
         });
         break;
       case LeaveSortBy.statusRejected:
@@ -524,7 +524,7 @@ class LeaveRequestLogic {
           final aRejected = a.status == 'rejected' ? 0 : 1;
           final bRejected = b.status == 'rejected' ? 0 : 1;
           if (aRejected != bRejected) return aRejected.compareTo(bRejected);
-          return b.startDate.compareTo(a.startDate);
+          return b.createdAt.compareTo(a.createdAt);
         });
         break;
     }

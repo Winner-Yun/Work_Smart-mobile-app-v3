@@ -6,6 +6,21 @@ import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 class PolicyService {
   final ApiClient _apiClient = ApiClient();
 
+  /// Backend error bodies are usually `{"message": "..."}`, but on some
+  /// failures (5xx from a proxy, HTML error pages, etc.) the response body
+  /// isn't a Map at all — indexing a String or List with `['message']`
+  /// throws a TypeError that then masks the real error, so this only reads
+  /// the key when [data] is actually a Map.
+  String _extractServerMessage(dynamic data, String? fallback) {
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
+    }
+    if (data is String && data.trim().isNotEmpty) {
+      return data.trim();
+    }
+    return fallback ?? 'Unknown error';
+  }
+
   Future<Map<String, dynamic>> fetchPolicy(String workspaceId) async {
     final String endpoint = ApiEndpoints.workspacePolicy(workspaceId);
     debugPrint('[PolicyService] Requesting: $endpoint');
@@ -26,7 +41,7 @@ class PolicyService {
       }
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      final serverMessage = e.response?.data?['message'] ?? e.message;
+      final serverMessage = _extractServerMessage(e.response?.data, e.message);
       debugPrint(
         '[PolicyService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
       );
