@@ -14,6 +14,7 @@ import 'package:flutter_worksmart_app/core/util/database/attendance_data.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
 import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/face_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/geofence_repository.dart';
@@ -26,7 +27,6 @@ import 'package:flutter_worksmart_app/features/user/service/geofence_service.dar
 import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/homepagescreen.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
@@ -38,11 +38,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-part 'homepage/permission_flow_mixin.dart';
-part 'homepage/data_loading_mixin.dart';
-part 'homepage/map_location_mixin.dart';
 part 'homepage/attendance_scan_mixin.dart';
+part 'homepage/data_loading_mixin.dart';
 part 'homepage/face_embedding_mixin.dart';
+part 'homepage/map_location_mixin.dart';
+part 'homepage/permission_flow_mixin.dart';
 
 enum _PermissionResolutionAction { retry, settings, notNow }
 
@@ -198,6 +198,7 @@ abstract class HomePageLogic extends _HomePageLogicState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runStartupPermissionFlow();
+      _detectDeveloperModeOnHomepage();
     });
   }
 

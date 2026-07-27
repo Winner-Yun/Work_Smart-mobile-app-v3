@@ -6,7 +6,7 @@ class LanguageManager with ChangeNotifier {
   factory LanguageManager() => _instance;
   LanguageManager._internal();
 
-  String _locale = 'km';
+  String _locale = 'en';
   final DatabaseHelper _db = DatabaseHelper();
 
   String get locale => _locale;

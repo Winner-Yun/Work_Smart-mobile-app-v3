@@ -710,7 +710,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               child: Text(
                 _searchQuery.isNotEmpty
                     ? 'Try searching with a different keyword.'
-                    : 'You aren\'t assigned to any workspace yet.',
+                    : 'You need to wait for someone to invite you to a workspace.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                 textAlign: TextAlign.center,
               ),
