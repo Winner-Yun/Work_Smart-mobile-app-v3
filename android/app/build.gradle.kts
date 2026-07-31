@@ -5,6 +5,7 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 // Resolves in order: OS environment variable (so CI/build machines can
@@ -50,7 +51,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.example.flutter_worksmart_app"
+    namespace = "com.aiworksmartmobile.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -62,7 +63,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flutter_worksmart_app"
+        applicationId = "com.aiworksmartmobile.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

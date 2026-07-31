@@ -15,6 +15,10 @@ class InviteRepository {
     return await _service.acceptInvite(inviteId);
   }
 
+  Future<void> joinByCode(String code) async {
+    await _service.joinByCode(code);
+  }
+
   Future<InviteActionResponse> rejectInvite(String inviteId) async {
     return await _service.rejectInvite(inviteId);
   }

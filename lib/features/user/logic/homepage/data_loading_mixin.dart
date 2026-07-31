@@ -158,11 +158,22 @@ mixin _DataLoadingMixin
         }
       }
 
-      final cachedGeofenceJson = prefs.getString('cached_homepage_geofence');
-      if (cachedGeofenceJson != null) {
-        final Map<String, dynamic> geofenceMap = jsonDecode(cachedGeofenceJson);
-        currentGeofence = GeofenceModel.fromJson(geofenceMap);
-        _officeConfigData['geofence'] = geofenceMap;
+      // Scoped per workspace (like the policy cache below) — otherwise
+      // switching to a workspace that has no geofence cached of its own
+      // would silently pick up whichever *other* workspace's geofence
+      // happened to be sitting under this key last, instead of showing
+      // "no geofence yet" until the background fetch resolves the real one.
+      if (selectedId != null && selectedId.isNotEmpty) {
+        final cachedGeofenceJson = prefs.getString(
+          'cached_homepage_geofence_$selectedId',
+        );
+        if (cachedGeofenceJson != null) {
+          final Map<String, dynamic> geofenceMap = jsonDecode(
+            cachedGeofenceJson,
+          );
+          currentGeofence = GeofenceModel.fromJson(geofenceMap);
+          _officeConfigData['geofence'] = geofenceMap;
+        }
       }
 
       if (selectedId != null && selectedId.isNotEmpty) {
@@ -242,7 +253,7 @@ mixin _DataLoadingMixin
           };
           _officeConfigData['geofence'] = geofenceMap;
           await prefs.setString(
-            'cached_homepage_geofence',
+            'cached_homepage_geofence_$selectedWorkspaceId',
             jsonEncode(geofenceMap),
           );
         }
@@ -341,7 +352,6 @@ mixin _DataLoadingMixin
     // profile from the server, adding a network round trip to every visit.
     await _loadLocalWorkspaceAndConfig();
     await _loadData();
-    await _fetchMyAttendance();
 
     if (mounted) {
       setState(() {
@@ -349,11 +359,15 @@ mixin _DataLoadingMixin
       });
     }
 
-    // Background refinement pass (server-sourced workspace/geofence/policy,
-    // re-applied attendance, map objects). isRefreshing must always get
-    // cleared here even on failure — _onScroll only allows a pull-to-refresh
-    // while isRefreshing is false, so an uncaught error here would otherwise
-    // permanently disable pull-to-refresh from the very first homepage load.
+    // Background refinement pass (server-sourced profile/workspace/geofence/
+    // policy, re-applied attendance, map objects). Re-fetching the profile
+    // here (same as onRefresh) means a name/avatar change made elsewhere
+    // (e.g. another device, or an admin edit) shows up on the next homepage
+    // visit without the user needing to pull-to-refresh manually.
+    // isRefreshing must always get cleared here even on failure —
+    // _onScroll only allows a pull-to-refresh while isRefreshing is false,
+    // so an uncaught error here would otherwise permanently disable
+    // pull-to-refresh from the very first homepage load.
     if (mounted) {
       setState(() {
         isRefreshing = true;
@@ -361,6 +375,7 @@ mixin _DataLoadingMixin
     }
 
     try {
+      await _fetchAndSaveUserProfile();
       await _fetchWorkspaceGeofenceAndPolicy();
       if (mounted) {
         await _loadData();

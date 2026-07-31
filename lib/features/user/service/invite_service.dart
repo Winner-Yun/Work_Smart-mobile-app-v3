@@ -72,6 +72,38 @@ class InviteService {
     }
   }
 
+  /// Joins a workspace directly via a shareable invite code (as opposed to
+  /// accepting a per-user invite through [acceptInvite]).
+  Future<Map<String, dynamic>> joinByCode(String code) async {
+    final String endpoint = ApiEndpoints.joinInviteByCode(code);
+    debugPrint('[InviteService] POST: $endpoint');
+
+    try {
+      final Response response = await _apiClient.post(endpoint, data: {});
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data;
+        if (data is Map<String, dynamic>) return data;
+        return <String, dynamic>{};
+      } else {
+        throw Exception(
+          'Failed to join workspace. Status: ${response.statusCode}',
+        );
+      }
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final serverMessage = e.response?.data?['message'] ?? e.message;
+      debugPrint(
+        '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
+      );
+      throw Exception('Network error [$statusCode]: $serverMessage');
+    } catch (e, stackTrace) {
+      debugPrint('[InviteService] Unexpected Error: $e');
+      debugPrint('[InviteService] StackTrace: $stackTrace');
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
   Future<InviteActionResponse> rejectInvite(String inviteId) async {
     final String endpoint = ApiEndpoints.rejectInvite(inviteId);
     debugPrint('[InviteService] PATCH: $endpoint');

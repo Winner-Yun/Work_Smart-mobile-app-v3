@@ -7,6 +7,7 @@ import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_attendance_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/home_tab_wrapper.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/request_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/profile_screens.dart';
 
 class MainScreen extends StatefulWidget {
@@ -108,7 +109,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   // ──────────────── EMPLOYEE APP NAVIGATION ────────────────
-  // Renders main tabs: Home, Attendance, Leave Requests, Profile
+  // Renders main tabs: Home, Attendance, Leave, Requests, Profile
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -123,12 +124,13 @@ class _MainScreenState extends State<MainScreen> {
         },
         onProfileTap: () {
           setState(() {
-            _currentIndex = 3;
+            _currentIndex = 4;
           });
         },
       ),
       AttendanceStatsScreen(loginData: widget.loginData),
       LeaveAttendanceScreen(loginData: widget.loginData),
+      RequestScreen(loginData: widget.loginData),
       ProfileScreen(loginData: widget.loginData),
     ];
 
@@ -166,6 +168,10 @@ class _MainScreenState extends State<MainScreen> {
             BottomNavigationBarItem(
               icon: const Icon(Icons.beach_access),
               label: AppStrings.tr('leave_menu'),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.description_outlined),
+              label: AppStrings.tr('request_menu'),
             ),
             BottomNavigationBarItem(
               icon: const Icon(Icons.person),

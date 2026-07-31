@@ -1,6 +1,7 @@
 // ignore_for_file: unrelated_type_equality_checks
 
 import 'package:dio/dio.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
@@ -88,6 +89,7 @@ class AuthLogic {
         return;
       }
 
+      await _fetchAndPrintFcmToken();
       onAutoLogin(username, userId, userType);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -171,6 +173,7 @@ class AuthLogic {
       );
 
       await _fetchAndCacheAppConfig();
+      await _fetchAndPrintFcmToken();
 
       debugPrint('--- LOGIN FLOW COMPLETED SUCCESSFULLY ---');
       return true;
@@ -207,6 +210,22 @@ class AuthLogic {
       );
     } catch (e) {
       debugPrint('[AuthLogic] Failed to fetch/cache app config: $e');
+    }
+  }
+
+  /// Fetches the device's FCM registration token once the user is confirmed
+  /// logged in (fresh Google sign-in or a valid cached session) and prints
+  /// it to the debug console for manual push-notification testing.
+  Future<void> _fetchAndPrintFcmToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission();
+      final token = await messaging.getToken();
+      debugPrint('===== FCM TOKEN =====');
+      debugPrint(token);
+      debugPrint('=====================');
+    } catch (e) {
+      debugPrint('[AuthLogic] Failed to get FCM token: $e');
     }
   }
 

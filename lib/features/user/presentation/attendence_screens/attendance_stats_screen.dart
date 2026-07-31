@@ -6,6 +6,7 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/logic/attendance_stats_logic.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/attendance_stats_skeleton_loading.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/task_icon_button.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 
 class AttendanceStatsScreen extends StatefulWidget {
@@ -184,6 +185,7 @@ class _AttendanceStatsScreenState extends AttendanceStatsLogic {
             color: Theme.of(context).colorScheme.primary,
           ),
         ),
+        TaskIconButton(loginData: widget.loginData),
       ],
       automaticallyImplyLeading: false,
       title: Text(

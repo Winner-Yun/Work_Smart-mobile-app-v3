@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/logic/workspace_screen_logic.dart';
+import 'package:flutter_worksmart_app/features/user/repository/invite_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/invite_service.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/invite_mail_button.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
@@ -55,6 +57,10 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
   late final ScrollController _scrollController;
   bool _scrolledUp = false;
 
+  final InviteRepository _inviteRepo = InviteRepository(InviteService());
+  final TextEditingController _joinCodeController = TextEditingController();
+  bool _isJoiningWorkspace = false;
+
   @override
   void initState() {
     super.initState();
@@ -78,7 +84,44 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _joinCodeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _joinWorkspaceByCode() async {
+    final String code = _joinCodeController.text.trim();
+    if (code.isEmpty || _isJoiningWorkspace) return;
+
+    setState(() => _isJoiningWorkspace = true);
+
+    try {
+      await _inviteRepo.joinByCode(code);
+      _joinCodeController.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          content: const Text(
+            'Joined workspace successfully',
+            style: TextStyle(color: AppColors.textLight),
+          ),
+        ),
+      );
+      await onRefresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          content: Text(
+            'Failed to join workspace: ${e.toString().replaceFirst('Exception: ', '')}',
+            style: const TextStyle(color: AppColors.textLight),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isJoiningWorkspace = false);
+    }
   }
 
   List<Workspace> get _filteredWorkspaces {
@@ -110,6 +153,11 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                   children: [
                     const SizedBox(height: 8),
                     _buildHeader(),
+                    const SizedBox(height: 16),
+                    _buildJoinByCodeCard()
+                        .animate()
+                        .fadeIn(duration: 280.ms)
+                        .slideY(begin: -0.08, end: 0, curve: Curves.easeOut),
                     const SizedBox(height: 16),
                     _buildSearchBar(), // Always displayed
                     const SizedBox(height: 16),
@@ -238,7 +286,6 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
           ),
         ],
       ),
-      actions: [InviteMailButton(loginData: widget.loginData)],
     );
   }
 
@@ -283,6 +330,84 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
           style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
         ),
       ],
+    );
+  }
+
+  Widget _buildJoinByCodeCard() {
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: primary.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primary.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.vpn_key_rounded, size: 18, color: primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: _joinCodeController,
+              enabled: !_isJoiningWorkspace,
+              textCapitalization: TextCapitalization.characters,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              decoration: InputDecoration(
+                hintText: 'Enter invite code to join',
+                hintStyle: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+              onSubmitted: (_) => _joinWorkspaceByCode(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          AnimatedSwitcher(
+            duration: 200.ms,
+            child: _isJoiningWorkspace
+                ? const SizedBox(
+                    key: ValueKey('joining'),
+                    width: 34,
+                    height: 34,
+                    child: Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : Material(
+                    key: const ValueKey('join'),
+                    color: primary,
+                    borderRadius: BorderRadius.circular(10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: _joinWorkspaceByCode,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          'Join',
+                          style: TextStyle(
+                            color: AppColors.textLight,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

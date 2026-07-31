@@ -15,6 +15,7 @@ import 'package:flutter_worksmart_app/features/user/presentation/attendence_scre
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/leave_attendance_skeleton_loading.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/task_icon_button.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -545,6 +546,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
           fontWeight: FontWeight.bold,
         ),
       ),
+      actions: [TaskIconButton(loginData: loginData)],
     );
   }
 

@@ -21,6 +21,7 @@ class ApiEndpoints {
   // INVITE ACTIONS
   static String acceptInvite(String inviteId) => '/invite/$inviteId/accept';
   static String rejectInvite(String inviteId) => '/invite/$inviteId/reject';
+  static String joinInviteByCode(String code) => '/invite/join/$code';
 
   // FACE
   static const String faceRegister = '/face/register';
@@ -38,6 +39,19 @@ class ApiEndpoints {
   static String createLeave(String workspaceId) => '/leave/$workspaceId/leave';
   static String leaveById(String leaveId) => '/leave/$leaveId';
   static String myLeaves(String workspaceId) => '/leave/$workspaceId/me';
+
+  // TASKS
+  static String workspaceTasks(String workspaceId) =>
+      '/workspace/$workspaceId/tasks';
+  static String taskById(String taskId) => '/workspace/task/$taskId';
+  static String taskStatus(String taskId) => '/workspace/task/$taskId/status';
+
+  // REQUESTS
+  static String workspaceRequests(String workspaceId) =>
+      '/request/$workspaceId';
+  static String myRequests(String workspaceId) => '/request/$workspaceId/me';
+  static String requestStatus(String requestId) => '/request/$requestId/status';
+  static String requestById(String requestId) => '/request/$requestId';
 
   // CONFIG
   static const String configData = '/config/data';

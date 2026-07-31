@@ -788,10 +788,20 @@ class DatabaseHelper {
       'cached_workspaces',
       'cached_workspace_user',
       'cached_workspace_data_timestamp',
-      'cached_homepage_geofence',
+      'cached_homepage_geofence', // legacy unscoped key, cleared for old installs
       'cached_homepage_policy', // legacy key, no longer written but cleared for old installs
     ];
     for (final key in workspaceScopedKeys) {
+      await prefs.remove(key);
+    }
+
+    // Geofence is now cached per workspace (`cached_homepage_geofence_<id>`)
+    // so it doesn't leak a previous workspace's geofence into a newly
+    // selected one — sweep every such key rather than one fixed name.
+    final geofenceKeys = prefs
+        .getKeys()
+        .where((key) => key.startsWith('cached_homepage_geofence_'));
+    for (final key in geofenceKeys) {
       await prefs.remove(key);
     }
   }

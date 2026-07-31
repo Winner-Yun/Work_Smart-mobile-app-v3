@@ -5,7 +5,7 @@ import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/logic/homepage_logic.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/home_page_skeleton_loading.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/invite_mail_button.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/task_icon_button.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class HomePageScreen extends StatefulWidget {
@@ -996,7 +996,7 @@ class _HomePageScreenState extends HomePageLogic {
             onPressed: widget.onSwitchWorkspace,
             icon: const Icon(Icons.home_work_sharp),
           ),
-        InviteMailButton(loginData: widget.loginData),
+        TaskIconButton(loginData: widget.loginData),
         const SizedBox(width: 8),
       ],
     );

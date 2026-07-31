@@ -11,6 +11,8 @@ import 'package:flutter_worksmart_app/features/user/presentation/homepage_screen
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/face_scan_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/invites_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/leave_management_screen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/request_screen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/task_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/mainscreen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/profile&setting_screens/help_support_screen.dart';
 
@@ -35,6 +37,8 @@ class AppRoute {
   static const String helpSupportScreen = '/helpSupportScreen';
   static const String registerFace = '/registerFace';
   static const String invitesScreen = '/invitesScreen';
+  static const String taskScreen = '/taskScreen';
+  static const String requestScreen = '/requestScreen';
 
   // ──────────────── ROUTE DEFINITIONS ────────────────
 
@@ -87,6 +91,10 @@ class AppRoute {
 
     // Invite Routes
     invitesScreen: _buildRoute((args) => InvitesScreen(loginData: args)),
+
+    // Task & Request Routes
+    taskScreen: _buildRoute((args) => TaskScreen(loginData: args)),
+    requestScreen: _buildRoute((args) => RequestScreen(loginData: args)),
   };
 
   static WidgetBuilder _buildRoute(
