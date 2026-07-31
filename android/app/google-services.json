@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "923388481561",
+    "project_id": "message-notify-591a5",
+    "storage_bucket": "message-notify-591a5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:923388481561:android:0328d20f70156293ab5a88",
+        "android_client_info": {
+          "package_name": "com.aiworksmartmobile.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxTdnXNpBK01u1cC2s5zeK6ZXk9yrfXFQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:923388481561:android:4f27431714da64bfab5a88",
+        "android_client_info": {
+          "package_name": "com.example.flutter_worksmart_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxTdnXNpBK01u1cC2s5zeK6ZXk9yrfXFQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
