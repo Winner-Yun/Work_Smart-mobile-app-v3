@@ -86,21 +86,32 @@ class InviteService {
         if (data is Map<String, dynamic>) return data;
         return <String, dynamic>{};
       } else {
-        throw Exception(
-          'Failed to join workspace. Status: ${response.statusCode}',
-        );
+        throw Exception('Failed to join workspace');
       }
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      final serverMessage = e.response?.data?['message'] ?? e.message;
+      final dynamic responseData = e.response?.data;
+      // This endpoint reports errors as {"detail": "..."} (FastAPI-style)
+      // rather than the {"message": "..."} shape most other endpoints use.
+      final String? serverMessage = responseData is Map
+          ? (responseData['detail'] ?? responseData['message'])
+                ?.toString()
+                .trim()
+          : null;
       debugPrint(
         '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
       );
-      throw Exception('Network error [$statusCode]: $serverMessage');
+      // Surface exactly what the backend says is wrong with the code (e.g.
+      // "Invite code not found") instead of a generic wrapped network error.
+      throw Exception(
+        (serverMessage != null && serverMessage.isNotEmpty)
+            ? serverMessage
+            : 'Failed to join workspace',
+      );
     } catch (e, stackTrace) {
       debugPrint('[InviteService] Unexpected Error: $e');
       debugPrint('[InviteService] StackTrace: $stackTrace');
-      throw Exception('Unexpected error: $e');
+      throw Exception('Failed to join workspace');
     }
   }
 

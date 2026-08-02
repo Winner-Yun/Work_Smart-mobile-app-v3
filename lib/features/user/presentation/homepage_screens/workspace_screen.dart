@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/logic/workspace_screen_logic.dart';
 import 'package:flutter_worksmart_app/features/user/repository/invite_repository.dart';
@@ -59,6 +60,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
 
   final InviteRepository _inviteRepo = InviteRepository(InviteService());
   final TextEditingController _joinCodeController = TextEditingController();
+  final FocusNode _joinCodeFocusNode = FocusNode();
   bool _isJoiningWorkspace = false;
 
   @override
@@ -85,6 +87,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _joinCodeController.dispose();
+    _joinCodeFocusNode.dispose();
     super.dispose();
   }
 
@@ -101,9 +104,9 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          content: const Text(
-            'Joined workspace successfully',
-            style: TextStyle(color: AppColors.textLight),
+          content: Text(
+            AppStrings.tr('workspace_joined_success'),
+            style: const TextStyle(color: AppColors.textLight),
           ),
         ),
       );
@@ -112,9 +115,9 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.error,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           content: Text(
-            'Failed to join workspace: ${e.toString().replaceFirst('Exception: ', '')}',
+            e.toString().replaceFirst('Exception: ', ''),
             style: const TextStyle(color: AppColors.textLight),
           ),
         ),
@@ -357,6 +360,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
           Expanded(
             child: TextField(
               controller: _joinCodeController,
+              focusNode: _joinCodeFocusNode,
               enabled: !_isJoiningWorkspace,
               textCapitalization: TextCapitalization.characters,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
@@ -500,37 +504,55 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     );
   }
 
+  // A single persistent Scrollable owns `_scrollController` at all times.
+  // Only its *content* switches between loading/error/empty/grid states —
+  // swapping the Scrollable widget type itself (e.g. GridView <->
+  // SingleChildScrollView) would transiently attach two ScrollPositions to
+  // the same controller in one frame and trip
+  // `ScrollController attached to multiple scroll views`.
   Widget _buildBody() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: _buildBodyContent(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBodyContent() {
     if (isLoading || isRefreshing) return _buildSkeletonLoader();
 
     if (errorMessage != null) {
-      return SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: Colors.red.shade300,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                errorMessage!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Colors.red.shade300,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry'),
+            ),
+          ],
         ),
       );
     }
@@ -540,10 +562,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     }
 
     return GridView.builder(
-      controller: _scrollController,
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 14,
@@ -744,11 +764,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
 
   Widget _buildSkeletonLoader() {
     return GridView.builder(
-      controller:
-          _scrollController, // Added to allow scroll-to-refresh even when loading
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 14,
@@ -802,11 +819,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Center(
-      child: SingleChildScrollView(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -817,7 +831,9 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.workspaces_outline,
+                _searchQuery.isNotEmpty
+                    ? Icons.workspaces_outline
+                    : Icons.vpn_key_rounded,
                 size: 48,
                 color: primaryColor,
               ),
@@ -826,7 +842,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
             Text(
               _searchQuery.isNotEmpty
                   ? 'No Matching Workspaces'
-                  : 'No Workspaces Available',
+                  : 'No Workspace Yet',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
@@ -835,7 +851,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               child: Text(
                 _searchQuery.isNotEmpty
                     ? 'Try searching with a different keyword.'
-                    : 'You need to wait for someone to invite you to a workspace.',
+                    : 'Ask your workspace admin for an invite code, then enter it above to join.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                 textAlign: TextAlign.center,
               ),
@@ -843,11 +859,9 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
             if (_searchQuery.isEmpty) ...[
               const SizedBox(height: 20),
               ElevatedButton.icon(
-                onPressed: () {
-                  if (widget.onProfileTap != null) widget.onProfileTap!();
-                },
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Setup Profile'),
+                onPressed: () => _joinCodeFocusNode.requestFocus(),
+                icon: const Icon(Icons.vpn_key_rounded, size: 18),
+                label: const Text('Enter Invite Code'),
                 style: ElevatedButton.styleFrom(
                   elevation: 0,
                   backgroundColor: primaryColor,

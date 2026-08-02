@@ -82,10 +82,13 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
   }
 
   Future<void> initCamera() async {
-    final status = await Permission.camera.status;
+    PermissionStatus status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
+    }
     if (!status.isGranted) {
       if (mounted) {
-        await _showCameraPermissionRequiredDialog();
+        await _showCameraPermissionRequiredDialog(isPermanentlyDenied: status.isPermanentlyDenied);
       }
       return;
     }
@@ -98,6 +101,8 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
           orElse: () => cameras.first,
         ),
       );
+    } else if (mounted) {
+      await _showCameraInitFailedDialog();
     }
   }
 
@@ -154,22 +159,19 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Camera Unavailable'),
-          content: const Text(
-            'Unable to start the camera. It may still be in use by another '
-            'part of the app. Please try again.',
-          ),
+          title: Text(AppStrings.tr('camera_unavailable_title')),
+          content: Text(AppStrings.tr('camera_unavailable_message')),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(AppStrings.tr('cancel_button')),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 initCamera();
               },
-              child: const Text('Retry'),
+              child: Text(AppStrings.tr('retry_action')),
             ),
           ],
         );
@@ -177,14 +179,21 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     );
   }
 
-  Future<void> _showCameraPermissionRequiredDialog() async {
+  Future<void> _showCameraPermissionRequiredDialog({
+    required bool isPermanentlyDenied,
+  }) async {
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Camera Permission Required'),
-          content: const Text(
-            'Camera permission is requested on the homepage. Please grant it there or open app settings.',
+          title: Text(AppStrings.tr('camera_permission_required_title')),
+          content: Text(
+            AppStrings.tr(
+              isPermanentlyDenied
+                  ? 'camera_permission_denied_register'
+                  : 'camera_permission_needed_register',
+            ),
           ),
           actions: [
             TextButton(
@@ -192,11 +201,14 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
                 Navigator.of(dialogContext).pop();
                 openAppSettings();
               },
-              child: const Text('Open Settings'),
+              child: Text(AppStrings.tr('open_settings_action')),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('OK'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                initCamera();
+              },
+              child: Text(AppStrings.tr('retry_action')),
             ),
           ],
         );
@@ -331,7 +343,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('face_sample_upload_failed')}: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
     } finally {
@@ -407,7 +419,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
           content: Text(
             '${AppStrings.tr('face_sample_upload_failed')}: $cleanError',
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
     }

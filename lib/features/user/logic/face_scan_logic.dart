@@ -59,10 +59,13 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
   }
 
   Future<void> initCamera() async {
-    final status = await Permission.camera.status;
+    PermissionStatus status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
+    }
     if (!status.isGranted) {
       if (mounted) {
-        await _showCameraPermissionRequiredDialog();
+        await _showCameraPermissionRequiredDialog(isPermanentlyDenied: status.isPermanentlyDenied);
       }
       return;
     }
@@ -74,7 +77,35 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         orElse: () => cameras!.first,
       );
       onNewCameraSelected(frontCamera);
+    } else if (mounted) {
+      await _showCameraInitFailedDialog();
     }
+  }
+
+  Future<void> _showCameraInitFailedDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(AppStrings.tr('camera_unavailable_title')),
+          content: Text(AppStrings.tr('camera_unavailable_message')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(AppStrings.tr('cancel_button')),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                initCamera();
+              },
+              child: Text(AppStrings.tr('retry_action')),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void onNewCameraSelected(CameraDescription cameraDescription) async {
@@ -109,14 +140,21 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
     }
   }
 
-  Future<void> _showCameraPermissionRequiredDialog() async {
+  Future<void> _showCameraPermissionRequiredDialog({
+    required bool isPermanentlyDenied,
+  }) async {
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Camera Permission Required'),
-          content: const Text(
-            'Camera permission is requested on the homepage. Please grant it there or open app settings.',
+          title: Text(AppStrings.tr('camera_permission_required_title')),
+          content: Text(
+            AppStrings.tr(
+              isPermanentlyDenied
+                  ? 'camera_permission_denied_scan'
+                  : 'camera_permission_needed_scan',
+            ),
           ),
           actions: [
             TextButton(
@@ -124,11 +162,14 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
                 Navigator.of(dialogContext).pop();
                 openAppSettings();
               },
-              child: const Text('Open Settings'),
+              child: Text(AppStrings.tr('open_settings_action')),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('OK'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                initCamera();
+              },
+              child: Text(AppStrings.tr('retry_action')),
             ),
           ],
         );
@@ -350,32 +391,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         isScanning = false;
         scanProgress = 0;
         isFlashOverlayEnabled = false;
-        scanMessage = 'Face verification timed out. Please try again.';
-        activeLivenessAction = null;
-        if (_livenessPassedInSession) {
-          completedLivenessActions
-            ..clear()
-            ..add(LivenessAction.blink)
-            ..add(LivenessAction.turnLeft)
-            ..add(LivenessAction.turnRight);
-        } else {
-          completedLivenessActions.clear();
-        }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Face verification timed out. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        isScanning = false;
-        scanProgress = 0;
-        isFlashOverlayEnabled = false;
-        scanMessage = 'Face verification failed. Please retry.';
+        scanMessage = AppStrings.tr('face_verification_timeout');
         activeLivenessAction = null;
         if (_livenessPassedInSession) {
           completedLivenessActions
@@ -389,8 +405,35 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Face verification failed: $e'),
-          backgroundColor: Colors.red,
+          content: Text(AppStrings.tr('face_verification_timeout')),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        isScanning = false;
+        scanProgress = 0;
+        isFlashOverlayEnabled = false;
+        scanMessage = AppStrings.tr('face_verification_failed_retry');
+        activeLivenessAction = null;
+        if (_livenessPassedInSession) {
+          completedLivenessActions
+            ..clear()
+            ..add(LivenessAction.blink)
+            ..add(LivenessAction.turnLeft)
+            ..add(LivenessAction.turnRight);
+        } else {
+          completedLivenessActions.clear();
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppStrings.tr('face_verification_failed_prefix')}: $e',
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
       return;
@@ -423,7 +466,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(verification.message),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
       }
@@ -689,9 +732,9 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${AppStrings.tr('attendance_scan_save_failed')}: unable to resolve workspace',
+            '${AppStrings.tr('attendance_scan_save_failed')}: ${AppStrings.tr('unable_to_resolve_workspace')}',
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
       return null;
@@ -749,7 +792,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('attendance_scan_save_failed')}: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
       return null;

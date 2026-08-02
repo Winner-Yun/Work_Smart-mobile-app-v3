@@ -48,7 +48,7 @@ const Map<String, String> leaveManagementStringsKm = {
   'remove_button': 'លុប',
   'leave_request_removed': 'បានលុបសំណើច្បាប់ឈប់សម្រាក',
   'sort_newest_date': 'កាលបរិច្ឆេទថ្មីបំផុត',
-  'sort_oldest_date': 'កាលបរិច្ឆេទចាស់ក្រោយបំផុត',
+  'sort_oldest_date': 'កាលបរិច្ឆេទចាស់បំផុត',
   'attachments': 'ឯកសារភ្ជាប់',
   'medical_report': 'របាយការណ៍វេជ្ជសាស្ត្រ',
   'no_attachments': 'គ្មានឯកសារភ្ជាប់ទេ',

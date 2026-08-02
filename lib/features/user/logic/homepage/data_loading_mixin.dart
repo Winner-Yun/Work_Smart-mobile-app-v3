@@ -300,24 +300,15 @@ mixin _DataLoadingMixin
   }
 
   Future<void> onRefresh() async {
-    // Manual refresh keeps the current page visible behind a modal loading
-    // dialog instead of blanking the screen with the full skeleton loader —
-    // isRefreshing is still tracked (guards re-entrancy / the scroll
-    // listener) but no longer drives any full-page skeleton UI.
+    // Manual refresh swaps the whole page for the same skeleton loader used
+    // on initial load (see homepagescreen.dart's build, gated on
+    // isManualRefreshing) instead of a modal dialog over stale content.
     if (!mounted) return;
 
     setState(() {
       isRefreshing = true;
+      isManualRefreshing = true;
     });
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const SystemLoadingDialog(
-        title: 'Refreshing...',
-        subtitle: 'Getting the latest workspace data',
-      ),
-    );
 
     try {
       await _fetchAndSaveUserProfile();
@@ -328,15 +319,13 @@ mixin _DataLoadingMixin
     } catch (e) {
       debugPrint('[onRefresh] Error: $e');
     } finally {
-      // Must always dismiss the dialog and clear isRefreshing, even on
-      // failure — the dialog is non-dismissible (barrierDismissible: false,
-      // PopScope(canPop: false)) and _onScroll only allows another
-      // pull-to-refresh while isRefreshing is false, so either one left
-      // unset here permanently locks the homepage.
+      // Must always clear both flags, even on failure — _onScroll only
+      // allows another pull-to-refresh while isRefreshing is false, so
+      // leaving either set here permanently locks the homepage.
       if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
         setState(() {
           isRefreshing = false;
+          isManualRefreshing = false;
         });
       }
     }
@@ -353,11 +342,14 @@ mixin _DataLoadingMixin
     await _loadLocalWorkspaceAndConfig();
     await _loadData();
 
-    if (mounted) {
-      setState(() {
-        isInitialDataLoading = false;
-      });
-    }
+    // Keep the skeleton up briefly even though the local load was fast, so
+    // loading doesn't read as a jarring instant pop-in.
+    await Future.delayed(AppDurations.minSkeletonDisplay);
+    if (!mounted) return;
+
+    setState(() {
+      isInitialDataLoading = false;
+    });
 
     // Background refinement pass (server-sourced profile/workspace/geofence/
     // policy, re-applied attendance, map objects). Re-fetching the profile

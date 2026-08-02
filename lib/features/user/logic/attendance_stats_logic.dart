@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
@@ -7,12 +10,11 @@ import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   late UserModel currentUser;
-  late List<AttendanceModel> userAttendanceRecords;
+  List<AttendanceModel> userAttendanceRecords = [];
   late List<Map<String, dynamic>> monthlyStats = [];
   late String? loggedInUserId;
 
@@ -25,6 +27,11 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   );
   bool isLoading = true;
   bool isRefreshing = false;
+
+  String _workspaceId = '';
+  SharedPreferences? _prefs;
+
+  String get _cacheKey => 'cached_attendance_stats_$_workspaceId';
 
   final List<String> monthKeys = [
     '',
@@ -46,13 +53,14 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
   void initState() {
     super.initState();
     loggedInUserId = _resolveUserId();
-    _loadData().then((_) {
+    _initData();
+  }
+
+  void _triggerChartAnimation() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() => animateChart = true);
-          }
-        });
+        setState(() => animateChart = true);
       }
     });
   }
@@ -76,76 +84,165 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
     }
   }
 
-  Future<void> _loadData() async {
+  /// Local-first init: load whatever attendance is cached instantly (and
+  /// derive monthlyStats from it), then silently refresh from the network in
+  /// the background. Only falls back to a blocking fetch (with the skeleton
+  /// loader, gated on `monthlyStats.isEmpty`) on a true cold start where
+  /// nothing is cached yet.
+  Future<void> _initData() async {
+    _prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    _workspaceId = _prefs!.getString('selected_workspace_id') ?? '';
+
+    await _loadFromLocal();
+    if (!mounted) return;
+
+    if (userAttendanceRecords.isNotEmpty) {
+      // Keep the skeleton up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (!mounted) return;
+      setState(() {
+        _recomputeStats();
+        isLoading = false;
+      });
+      _triggerChartAnimation();
+      _fetchFromNetwork(showLoading: false);
+    } else {
+      await _fetchFromNetwork(showLoading: true);
+      _triggerChartAnimation();
+    }
+  }
+
+  Future<void> _loadFromLocal() async {
+    final prefs = _prefs;
+    if (prefs == null || _workspaceId.isEmpty) return;
+
+    final cachedJson = prefs.getString(_cacheKey);
+    if (cachedJson == null) return;
+
     try {
-      currentUser = await _resolveCurrentUser();
+      final List<dynamic> decoded = jsonDecode(cachedJson);
+      userAttendanceRecords = decoded
+          .map((e) => AttendanceModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint(
+        '⛔ [AttendanceStatsLogic] Error parsing cached attendance: $e',
+      );
+    }
+  }
 
-      final prefs = await SharedPreferences.getInstance();
-      final workspaceId = prefs.getString('selected_workspace_id') ?? '';
+  Future<void> _fetchFromNetwork({required bool showLoading}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        isLoading = true;
+      });
+    }
 
-      userAttendanceRecords = workspaceId.isEmpty
+    try {
+      final resolvedUser = await _resolveCurrentUser();
+
+      final fetchedRecords = _workspaceId.isEmpty
           ? <AttendanceModel>[]
           : await _attendanceRepo.getMyAttendance(
-              workspaceId,
+              _workspaceId,
               sortBy: 'date',
               sortOrder: 'desc',
               limit: 500,
             );
 
-      final now = DateTime.now();
-      selectedYear = now.year;
-      monthlyStats = [];
+      if (!mounted) return;
 
-      for (int i = 4; i >= 0; i--) {
-        final date = DateTime(now.year, now.month - i, 1);
+      final bool changed = _hasAttendanceChanged(fetchedRecords);
 
-        monthlyStats.add({
-          "monthKey": monthKeys[date.month],
-          "year": date.year,
-          "percentage": _calculateMonthlyPercentage(date),
-          "present": _countByStatus(date, 'on_time'),
-          "late": _countByStatus(date, 'late'),
-          "absent": _countByStatus(date, 'absent'),
-        });
+      setState(() {
+        currentUser = resolvedUser;
+        if (changed) {
+          userAttendanceRecords = fetchedRecords;
+        }
+        _recomputeStats();
+        isLoading = false;
+      });
+
+      if (changed) {
+        await _saveToCache(fetchedRecords);
       }
-
-      selectedMonthIndex = monthlyStats.isNotEmpty
-          ? monthlyStats.length - 1
-          : 0;
     } catch (e) {
       debugPrint("Load error: $e");
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+      });
     }
-
-    setState(() {
-      isLoading = false;
-    });
   }
 
-  /// Manual refresh — shows a non-dismissible SystemLoadingDialog over the
-  /// current page while `_loadData` re-fetches, rather than dropping back to
-  /// the full skeleton loader (which is initial-load only, gated on
-  /// `monthlyStats.isEmpty`). Wrapped in try/finally so the dialog always
-  /// gets dismissed even if the fetch throws.
+  bool _hasAttendanceChanged(List<AttendanceModel> fetched) {
+    final String fetchedJson = jsonEncode(
+      fetched.map((e) => e.toJson()).toList(),
+    );
+    final String currentJson = jsonEncode(
+      userAttendanceRecords.map((e) => e.toJson()).toList(),
+    );
+    return fetchedJson != currentJson;
+  }
+
+  Future<void> _saveToCache(List<AttendanceModel> records) async {
+    final prefs = _prefs;
+    if (prefs == null || _workspaceId.isEmpty) return;
+    try {
+      await prefs.setString(
+        _cacheKey,
+        jsonEncode(records.map((e) => e.toJson()).toList()),
+      );
+    } catch (e) {
+      debugPrint('⛔ [AttendanceStatsLogic] Error saving cache: $e');
+    }
+  }
+
+  /// Recomputes monthlyStats/selectedYear/selectedMonthIndex from
+  /// userAttendanceRecords. Must run against both the cached list (initial
+  /// local load) and freshly-fetched data (background/manual refresh) so
+  /// derived stats never go stale relative to the raw records.
+  void _recomputeStats() {
+    final now = DateTime.now();
+    selectedYear = now.year;
+    final newStats = <Map<String, dynamic>>[];
+
+    for (int i = 4; i >= 0; i--) {
+      final date = DateTime(now.year, now.month - i, 1);
+
+      newStats.add({
+        "monthKey": monthKeys[date.month],
+        "year": date.year,
+        "percentage": _calculateMonthlyPercentage(date),
+        "present": _countByStatus(date, 'on_time'),
+        "late": _countByStatus(date, 'late'),
+        "absent": _countByStatus(date, 'absent'),
+      });
+    }
+
+    monthlyStats = newStats;
+    selectedMonthIndex = monthlyStats.isNotEmpty
+        ? monthlyStats.length - 1
+        : 0;
+  }
+
+  /// Manual refresh — drops back to the full skeleton loader (build() shows
+  /// it whenever `monthlyStats.isEmpty || isRefreshing`) instead of a modal
+  /// dialog over the current page. Always hits the network directly
+  /// (explicit user action) and updates the cache on success via
+  /// `_fetchFromNetwork`.
   Future<void> onRefresh() async {
     if (isRefreshing || !mounted) return;
     setState(() => isRefreshing = true);
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const SystemLoadingDialog(
-        title: 'Refreshing...',
-        subtitle: 'Getting the latest attendance data',
-      ),
-    );
-
     try {
-      await _loadData();
+      await _fetchFromNetwork(showLoading: false);
     } catch (e) {
       debugPrint('[AttendanceStatsLogic] refresh error: $e');
     } finally {
       if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
         setState(() => isRefreshing = false);
       }
     }

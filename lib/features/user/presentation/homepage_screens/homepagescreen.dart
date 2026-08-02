@@ -57,9 +57,10 @@ class _HomePageScreenState extends HomePageLogic {
 
   @override
   Widget build(BuildContext context) {
-    // Skeleton loader is for the initial load only — manual refresh (onRefresh)
-    // shows a SystemLoadingDialog instead and keeps this page visible underneath.
-    if (isInitialDataLoading) {
+    // Manual refresh (onRefresh) shows the same skeleton as the initial
+    // load — isManualRefreshing is only ever set by that explicit user
+    // action, never by the silent cache-first background refresh.
+    if (isInitialDataLoading || isManualRefreshing) {
       return const Scaffold(body: SafeArea(child: HomePageSkeletonLoading()));
     }
 
@@ -135,8 +136,9 @@ class _HomePageScreenState extends HomePageLogic {
             ? -_scrollController.position.pixels
             : 0.0;
 
-        // While refreshing, SystemLoadingDialog (shown by onRefresh) owns the
-        // loading feedback, so this drag-progress indicator just hides.
+        // While refreshing, the full skeleton (shown by onRefresh via
+        // isManualRefreshing) owns the loading feedback, so this
+        // drag-progress indicator just hides.
         if (overscroll <= 0 || isInitialDataLoading || isRefreshing) {
           return const SizedBox.shrink();
         }

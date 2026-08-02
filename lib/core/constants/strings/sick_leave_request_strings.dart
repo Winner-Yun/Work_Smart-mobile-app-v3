@@ -30,6 +30,8 @@ const Map<String, String> sickLeaveRequestStringsEn = {
   'annual_leave_mode_duration': 'Duration',
   'annual_leave_date_mode_hint': 'Tip: Enable duration mode if you need more than one day.',
   'total_leave_label': 'Total',
+  'attachment_type_not_allowed': 'Only PNG and JPG images are allowed.',
+  'sick_leave_active_limit_reached': 'You already have {count} active sick leave request(s). Please wait for approval or remove an existing request.',
 };
 
 const Map<String, String> sickLeaveRequestStringsKm = {
@@ -63,4 +65,6 @@ const Map<String, String> sickLeaveRequestStringsKm = {
   'annual_leave_mode_duration': 'រយៈពេល',
   'annual_leave_date_mode_hint': 'គន្លឹះ៖ បើត្រូវការឈប់លើសមួយថ្ងៃ សូមបើកម៉ូដរយៈពេល។',
   'total_leave_label': 'សរុប',
+  'attachment_type_not_allowed': 'អនុញ្ញាតតែរូបភាព PNG និង JPG ប៉ុណ្ណោះ។',
+  'sick_leave_active_limit_reached': 'អ្នកមានសំណើច្បាប់ឈឺសកម្មចំនួន {count} រួចហើយ។ សូមរង់ចាំការអនុម័ត ឬលុបសំណើដែលមានស្រាប់។',
 };

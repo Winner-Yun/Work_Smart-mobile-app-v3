@@ -49,9 +49,8 @@ mixin _PermissionFlowMixin on _HomePageLogicState, _MapLocationMixin {
 
       final _PermissionResolutionAction
       action = await _showPermissionResolutionDialog(
-        title: 'Location Permission Required',
-        message:
-            'Location access is needed to verify attendance range and update your office map status.',
+        title: AppStrings.tr('location_permission_required_title'),
+        message: AppStrings.tr('location_permission_required_message'),
         canRetry: permission != LocationPermission.deniedForever,
       );
 
@@ -120,9 +119,8 @@ mixin _PermissionFlowMixin on _HomePageLogicState, _MapLocationMixin {
 
     await _requestPermissionWithResolution(
       permission: Permission.notification,
-      title: 'Notification Permission Required',
-      message:
-          'Notifications keep you informed about attendance and leave status updates in real time.',
+      title: AppStrings.tr('notification_permission_required_title'),
+      message: AppStrings.tr('notification_permission_required_message'),
     );
   }
 

@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
@@ -30,7 +32,7 @@ class AttendanceCalendarScreen extends StatefulWidget {
 }
 
 class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
-  late UserModel _currentUser;
+  UserModel _currentUser = UserModel.fromJson(const <String, dynamic>{});
   List<AttendanceModel> _userAttendanceRecords = [];
   late String? loggedInUserId;
 
@@ -42,6 +44,11 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     AttendanceService(),
   );
 
+  String _workspaceId = '';
+  SharedPreferences? _prefs;
+
+  String get _cacheKey => 'cached_attendance_calendar_$_workspaceId';
+
   @override
   void initState() {
     super.initState();
@@ -49,7 +56,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     _selectedDay = now.day;
     _currentViewDate = DateTime(now.year, now.month);
     loggedInUserId = _resolveUserId();
-    _loadData();
+    _initData();
   }
 
   String _resolveUserId() {
@@ -71,36 +78,126 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     }
   }
 
-  Future<void> _loadData() async {
+  /// Local-first init: load whatever attendance is cached instantly, then
+  /// silently refresh from the network in the background. Only falls back
+  /// to a blocking fetch (with the loading indicator) on a true cold start
+  /// where nothing is cached yet.
+  Future<void> _initData() async {
+    _prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    _workspaceId = _prefs!.getString('selected_workspace_id') ?? '';
+
+    await _loadFromLocal();
+    if (!mounted) return;
+
+    if (_userAttendanceRecords.isNotEmpty) {
+      // Keep the loading state up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      _fetchFromNetwork(showLoading: false);
+    } else {
+      await _fetchFromNetwork(showLoading: true);
+    }
+  }
+
+  Future<void> _loadFromLocal() async {
+    final prefs = _prefs;
+    if (prefs == null || _workspaceId.isEmpty) return;
+
+    final cachedJson = prefs.getString(_cacheKey);
+    if (cachedJson == null) return;
+
     try {
-      _currentUser = await _resolveCurrentUser();
+      final List<dynamic> decoded = jsonDecode(cachedJson);
+      _userAttendanceRecords = decoded
+          .map((e) => AttendanceModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint(
+        '⛔ [AttendanceCalendarScreen] Error parsing cached attendance: $e',
+      );
+    }
+  }
 
-      final prefs = await SharedPreferences.getInstance();
-      final workspaceId = prefs.getString('selected_workspace_id') ?? '';
+  Future<void> _fetchFromNetwork({required bool showLoading}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
-      _userAttendanceRecords = workspaceId.isEmpty
+    try {
+      final resolvedUser = await _resolveCurrentUser();
+
+      final fetchedRecords = _workspaceId.isEmpty
           ? <AttendanceModel>[]
           : await _attendanceRepo.getMyAttendance(
-              workspaceId,
+              _workspaceId,
               sortBy: 'date',
               sortOrder: 'desc',
               limit: 500,
             );
 
       if (!mounted) return;
+
+      final bool changed = _hasAttendanceChanged(fetchedRecords);
+
       setState(() {
+        _currentUser = resolvedUser;
+        if (changed) {
+          _userAttendanceRecords = fetchedRecords;
+        }
         _isLoading = false;
       });
+
+      if (changed) {
+        await _saveToCache(fetchedRecords);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${AppStrings.tr('attendance_proof_failed')}: $error'),
-        ),
+      if (showLoading) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppStrings.tr('attendance_proof_failed')}: $error',
+            ),
+          ),
+        );
+      } else {
+        debugPrint(
+          '⛔ [AttendanceCalendarScreen] Background refresh failed: $error',
+        );
+      }
+    }
+  }
+
+  bool _hasAttendanceChanged(List<AttendanceModel> fetched) {
+    final String fetchedJson = jsonEncode(
+      fetched.map((e) => e.toJson()).toList(),
+    );
+    final String currentJson = jsonEncode(
+      _userAttendanceRecords.map((e) => e.toJson()).toList(),
+    );
+    return fetchedJson != currentJson;
+  }
+
+  Future<void> _saveToCache(List<AttendanceModel> records) async {
+    final prefs = _prefs;
+    if (prefs == null || _workspaceId.isEmpty) return;
+    try {
+      await prefs.setString(
+        _cacheKey,
+        jsonEncode(records.map((e) => e.toJson()).toList()),
       );
+    } catch (e) {
+      debugPrint('⛔ [AttendanceCalendarScreen] Error saving cache: $e');
     }
   }
 

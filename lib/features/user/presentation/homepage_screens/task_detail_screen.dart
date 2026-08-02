@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/repository/task_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/task_service.dart';
@@ -43,9 +44,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.error,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           content: Text(
-            'Failed to update status: ${e.toString().replaceFirst('Exception: ', '')}',
+            '${AppStrings.tr('task_status_update_failed')}: ${e.toString().replaceFirst('Exception: ', '')}',
             style: const TextStyle(color: AppColors.textLight),
           ),
         ),

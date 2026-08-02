@@ -15,6 +15,8 @@ const Map<String, String> inviteStringsEn = {
   'confirm_reject_invite_msg': 'Are you sure you want to reject this invite?',
   'search_invites_hint': 'Search invites...',
   'no_invites_matching': 'No invites matching',
+  'select_workspace_first': 'Please select a workspace first',
+  'workspace_joined_success': 'Joined workspace successfully',
 };
 
 const Map<String, String> inviteStringsKm = {
@@ -33,4 +35,6 @@ const Map<String, String> inviteStringsKm = {
   'confirm_reject_invite_msg': 'តើអ្នកប្រាកដជាចង់បដិសេធការអញ្ជើញនេះមែនទេ?',
   'search_invites_hint': 'ស្វែងរកការអញ្ជើញ...',
   'no_invites_matching': 'រកមិនឃើញការអញ្ជើញដែលត្រូវនឹង',
+  'select_workspace_first': 'សូមជ្រើសរើសកន្លែងធ្វើការជាមុនសិន',
+  'workspace_joined_success': 'បានចូលរួមកន្លែងធ្វើការដោយជោគជ័យ',
 };

@@ -1,22 +1,23 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_all_requests_screen.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
-import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_all_requests_screen.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/leave_management_skeleton_loading.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -96,11 +97,12 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     }
   }
 
-  /// Resolves the workspace, then waits for the policy to be fetched fresh
-  /// from the server before loading the leave list — the skeleton stays up
-  /// for this whole span, so the screen never flashes the hardcoded
-  /// fallback totals (or a stale cached value) before jumping to the real
-  /// numbers a moment later.
+  /// Cache-first: render whatever's cached locally (policy + leave list)
+  /// immediately — no blocking skeleton — then silently refresh both from
+  /// the server in the background and update in place only if something
+  /// actually changed. A true cold start (neither cached) is the only case
+  /// that still waits on the network, since there's nothing meaningful to
+  /// show otherwise.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -110,9 +112,99 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       return;
     }
 
-    await _fetchPolicyFromServer();
-    await _loadData();
+    final String workspaceId = _workspaceId!;
+    final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(workspaceId);
+    final List<LeaveModel>? cachedLeaves = await _readCachedLeaves(
+      prefs,
+      workspaceId,
+    );
+
+    final bool hasLocalData = cachedPolicyMap != null || cachedLeaves != null;
+
+    if (hasLocalData) {
+      _applyPolicyLimits(cachedPolicyMap);
+      // Keep the skeleton up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (mounted) {
+        setState(() {
+          _leaveRecords = cachedLeaves ?? <LeaveModel>[];
+          _applyUserData();
+          _isLoading = false;
+        });
+      }
+      unawaited(_refreshFromServerInBackground());
+    } else {
+      await _fetchPolicyFromServer();
+      await _loadData();
+    }
   }
+
+  /// Silently re-fetches policy + leave list from the server after the
+  /// cache-first render above, and updates the UI in place only if the
+  /// fetched data actually differs from what's already shown.
+  Future<void> _refreshFromServerInBackground() async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    await _fetchPolicyFromServer();
+
+    try {
+      final List<LeaveModel> fetchedLeaves = await _leaveRepo.getMyLeaves(
+        workspaceId,
+      );
+
+      final bool leavesChanged =
+          jsonEncode(_leaveRecords.map((l) => l.toJson()).toList()) !=
+          jsonEncode(fetchedLeaves.map((l) => l.toJson()).toList());
+
+      if (leavesChanged) {
+        if (!mounted) return;
+        setState(() {
+          _leaveRecords = fetchedLeaves;
+          _applyUserData();
+        });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await _saveCachedLeaves(prefs, workspaceId, fetchedLeaves);
+    } catch (e) {
+      // Best-effort background refresh; the cache-first data already on
+      // screen stays put on failure.
+      debugPrint('[LeaveDetailScreen] Background leave refresh failed: $e');
+    }
+  }
+
+  /// Reads the cached leave list (SharedPreferences JSON array of
+  /// `LeaveModel.toJson()`) for [workspaceId]. Returns null if nothing is
+  /// cached or it fails to decode.
+  Future<List<LeaveModel>?> _readCachedLeaves(
+    SharedPreferences prefs,
+    String workspaceId,
+  ) async {
+    final String? raw = prefs.getString(_leavesCacheKey(workspaceId));
+    if (raw == null) return null;
+    try {
+      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((e) => LeaveModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[LeaveDetailScreen] Failed to decode cached leaves: $e');
+      return null;
+    }
+  }
+
+  Future<void> _saveCachedLeaves(
+    SharedPreferences prefs,
+    String workspaceId,
+    List<LeaveModel> leaves,
+  ) async {
+    final String encoded = jsonEncode(leaves.map((l) => l.toJson()).toList());
+    await prefs.setString(_leavesCacheKey(workspaceId), encoded);
+  }
+
+  String _leavesCacheKey(String workspaceId) => 'cached_leaves_$workspaceId';
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -124,9 +216,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     }
 
     // Leave totals come from the workspace policy, cached locally — read it
-    // here instead of hardcoding limits. By the time this runs on initial
-    // load, `_loadInitialData` has already awaited a fresh server fetch, so
-    // this is normally reading back what that fetch just saved.
+    // here instead of hardcoding limits.
     final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
       _workspaceId!,
     );
@@ -140,6 +230,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
         _applyUserData();
         _isLoading = false;
       });
+      await _saveCachedLeaves(prefs, _workspaceId!, leaves);
     } catch (e) {
       // The list endpoint is known to be unreliable right now, so fail
       // open with an empty list rather than crashing the screen.
@@ -160,9 +251,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   }
 
   void _applyPolicyLimits(Map<String, dynamic>? policyMap) {
-    final int? annualLimit = _readPositiveInt(
-      policyMap?['annual_leave_limit'],
-    );
+    final int? annualLimit = _readPositiveInt(policyMap?['annual_leave_limit']);
     final int? sickLimit = _readPositiveInt(policyMap?['sick_leave_limit']);
     if (annualLimit != null) _annualTotal = annualLimit;
     if (sickLimit != null) _sickTotal = sickLimit;
@@ -225,25 +314,16 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   /// single pull gesture only triggers one round of calls instead of firing
   /// again on every scroll event while overscrolled.
   ///
-  /// Shows SystemLoadingDialog over the current page instead of swapping to
-  /// the full skeleton (see `build`), and always dismisses the dialog /
-  /// clears `_isRefreshing` in `finally` — without that guarantee, an
-  /// uncaught error partway through would leave the non-dismissible dialog
-  /// stuck forever and permanently disable further pull-to-refresh attempts
-  /// (`_onScroll` only fires while `!_isRefreshing`).
+  /// Swaps to the same full skeleton as the initial load (see `build`,
+  /// gated on `_isLoading || _isRefreshing`) instead of a modal dialog over
+  /// stale content, and always clears `_isRefreshing` in `finally` —
+  /// without that guarantee, an uncaught error partway through would
+  /// permanently disable further pull-to-refresh attempts (`_onScroll`
+  /// only fires while `!_isRefreshing`).
   Future<void> _handleRefresh() async {
     if (_isRefreshing) return;
     if (!mounted) return;
     setState(() => _isRefreshing = true);
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const SystemLoadingDialog(
-        title: 'Refreshing...',
-        subtitle: 'Getting the latest leave data',
-      ),
-    );
 
     try {
       await _fetchPolicyFromServer();
@@ -252,7 +332,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       debugPrint('[LeaveDetailScreen] refresh error: $e');
     } finally {
       if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
         setState(() => _isRefreshing = false);
       }
     }
@@ -354,7 +433,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(),
-      body: _isLoading
+      body: _isLoading || _isRefreshing
           ? const LeaveManagementSkeletonLoading()
           : Column(
               children: [
@@ -387,9 +466,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
                               hasScrollBody: false,
                               child: Padding(
                                 padding: EdgeInsets.only(
-                                  top:
-                                      MediaQuery.of(context).size.height *
-                                      0.1,
+                                  top: MediaQuery.of(context).size.height * 0.1,
                                 ),
                                 child: _buildEmptyState(context),
                               ),
@@ -917,9 +994,12 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'You already have $activeSickRequests active sick leave request(s). Please wait for approval or remove an existing request.',
+              AppStrings.tr('sick_leave_active_limit_reached').replaceAll(
+                '{count}',
+                activeSickRequests.toString(),
+              ),
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
         return;

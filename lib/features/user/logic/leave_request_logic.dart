@@ -144,7 +144,7 @@ class LeaveRequestLogic {
               AppStrings.tr('leave_request_submit_failed'),
               style: TextStyle(color: Colors.white),
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
       }

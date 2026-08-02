@@ -93,4 +93,19 @@ class LeaveModel {
     }
     return value.toString();
   }
+
+  // Plain (non-MongoDB-extended-JSON) shape — round-trips through
+  // fromJson, which accepts plain strings as well as the $oid/$date form.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'workspace_id': workspaceId,
+    'user_id': uid,
+    'leave_type': leaveType,
+    'reason': reason,
+    'start_date': startDate.toIso8601String(),
+    'end_date': endDate.toIso8601String(),
+    'status': status,
+    'attachment_url': attachmentUrl,
+    'created_at': createdAt.toIso8601String(),
+  };
 }

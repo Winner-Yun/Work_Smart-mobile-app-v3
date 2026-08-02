@@ -25,7 +25,7 @@ const Map<String, String> telegramStringsKm = {
   'step_1_title': 'ស្កេនកូដ QR',
   'step_1_desc': 'បើកកាមេរ៉ាទូរស័ព្ទរបស់អ្នក ដើម្បីស្កេនកូដខាងលើ។',
   'step_2_title': 'ចុចប៊ូតុង ចាប់ផ្តើម (Start)',
-  'step_2_desc': 'ផ្ញើសារ /start ទៅកាន់ប៊ូត ដើម្បីធ្វើការចុះឈ្មោះ។',
+  'step_2_desc': 'ផ្ញើសារ /start ទៅកាន់ Bot ដើម្បីធ្វើការចុះឈ្មោះ។',
   'step_3_title': 'ទទួលបានការជូនដំណឹង',
   'step_3_desc': 'អ្នកនឹងទទួលបានការជូនដំណឹងដោយស្វ័យប្រវត្តិតាម Telegram។',
   'telegram_connected_success': 'បានភ្ជាប់ទៅ Telegram ជោគជ័យ!',

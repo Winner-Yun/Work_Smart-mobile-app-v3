@@ -23,6 +23,8 @@ const Map<String, String> menuStringsEn = {
   'activity_swipe_back_hint': 'Tip: Swipe right to go back.',
   'today': 'Today',
   'yesterday': 'Yesterday',
+  'task_status_update_failed': 'Failed to update status',
+  'request_submit_failed': 'Failed to submit request',
 };
 
 const Map<String, String> menuStringsKm = {
@@ -49,4 +51,6 @@ const Map<String, String> menuStringsKm = {
   'activity_swipe_back_hint': 'ចំណាំ៖ អូសទៅស្តាំ ដើម្បីត្រឡប់ក្រោយ។',
   'today': 'ថ្ងៃនេះ',
   'yesterday': 'ម្សិលមិញ',
+  'task_status_update_failed': 'មិនអាចធ្វើបច្ចុប្បន្នភាពស្ថានភាពបានទេ',
+  'request_submit_failed': 'មិនអាចដាក់ស្នើសំណើបានទេ',
 };

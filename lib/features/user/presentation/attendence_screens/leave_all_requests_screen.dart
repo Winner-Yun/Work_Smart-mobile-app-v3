@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
@@ -8,7 +12,6 @@ import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,12 +42,17 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
   late final ScrollController _scrollController;
 
+  // Cache-first: this screen keeps its own cache key, independent from
+  // leave_management_screen.dart / leave_attendance_screen.dart (which use
+  // `cached_leaves_$workspaceId`), so the two never share or clobber state.
+  static const String _cacheKeyPrefix = 'cached_leave_all_requests_';
+
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
-    _loadData();
+    _initLoad();
   }
 
   void _onScroll() {
@@ -65,23 +73,14 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     super.dispose();
   }
 
-  /// Scroll-up-to-refresh (matches homepage/leave-management gesture). Shows
-  /// SystemLoadingDialog over the current list instead of the initial-load
-  /// spinner, and always clears via `finally` so a failed fetch can't leave
-  /// the non-dismissible dialog stuck or permanently block further
-  /// pull-to-refresh attempts.
+  /// Scroll-up-to-refresh (matches homepage/leave-management gesture).
+  /// Swaps to the same initial-load loading state (`_buildLoadingState`,
+  /// gated on `_isLoading || _isRefreshing`) instead of a modal dialog over
+  /// the current list, and always clears via `finally` so a failed fetch
+  /// can't permanently block further pull-to-refresh attempts.
   Future<void> _handleRefresh() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const SystemLoadingDialog(
-        title: 'Refreshing...',
-        subtitle: 'Getting the latest leave data',
-      ),
-    );
 
     try {
       await _loadData();
@@ -89,12 +88,116 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       debugPrint('[LeaveAllRequestsScreen] refresh error: $e');
     } finally {
       if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
         setState(() => _isRefreshing = false);
       }
     }
   }
 
+  /// Local-first init: show whatever is cached for this workspace instantly
+  /// (no blocking spinner), then silently refresh from the network in the
+  /// background. Only a true cold start (no cache at all) falls back to the
+  /// blocking `_loadData()` fetch.
+  Future<void> _initLoad() async {
+    final prefs = await SharedPreferences.getInstance();
+    _workspaceId = prefs.getString('selected_workspace_id');
+
+    if (_workspaceId == null || _workspaceId!.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    final List<LeaveModel> cached = await _loadCachedLeaves(
+      prefs,
+      _workspaceId!,
+    );
+
+    if (!mounted) return;
+
+    if (cached.isNotEmpty) {
+      // Keep the loading state up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (!mounted) return;
+      setState(() {
+        _history = cached..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _applyFilter();
+        _isLoading = false;
+      });
+      // Background refresh, unconditional, silent (no loader).
+      unawaited(_refreshInBackground());
+    } else {
+      await _loadData();
+    }
+  }
+
+  Future<List<LeaveModel>> _loadCachedLeaves(
+    SharedPreferences prefs,
+    String workspaceId,
+  ) async {
+    try {
+      final String? cachedJson = prefs.getString(
+        '$_cacheKeyPrefix$workspaceId',
+      );
+      if (cachedJson == null) return <LeaveModel>[];
+      final List<dynamic> decoded = jsonDecode(cachedJson);
+      return decoded
+          .map((json) => LeaveModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[LeaveAllRequestsScreen] Error loading cached leaves: $e');
+      return <LeaveModel>[];
+    }
+  }
+
+  /// Silent background refresh: fetches fresh data and only touches state
+  /// (and the cache) if it actually differs from what's already shown.
+  Future<void> _refreshInBackground() async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null) return;
+
+    try {
+      final leaves = await _leaveRepo.getMyLeaves(workspaceId);
+      if (!mounted) return;
+
+      final List<LeaveModel> sorted = leaves.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      final String newJson = jsonEncode(
+        sorted.map((e) => e.toJson()).toList(),
+      );
+      final String currentJson = jsonEncode(
+        _history.map((e) => e.toJson()).toList(),
+      );
+
+      if (newJson != currentJson) {
+        setState(() {
+          _history = sorted;
+          _applyFilter();
+        });
+        await _saveCachedLeaves(sorted);
+      }
+    } catch (e) {
+      debugPrint('[LeaveAllRequestsScreen] Background refresh failed: $e');
+    }
+  }
+
+  Future<void> _saveCachedLeaves(List<LeaveModel> data) async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_cacheKeyPrefix$workspaceId',
+        jsonEncode(data.map((e) => e.toJson()).toList()),
+      );
+    } catch (e) {
+      debugPrint('[LeaveAllRequestsScreen] Error saving leaves cache: $e');
+    }
+  }
+
+  /// Explicit (blocking) fetch used for: true cold start, pull-to-refresh,
+  /// and reloads after a mutation (delete). Always applies the fetched
+  /// result and keeps the cache in sync on success.
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -107,12 +210,14 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     try {
       final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
       if (!mounted) return;
+      final List<LeaveModel> sorted = leaves.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {
-        _history = leaves.toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _history = sorted;
         _applyFilter();
         _isLoading = false;
       });
+      await _saveCachedLeaves(sorted);
     } catch (e) {
       // The list endpoint is known to be unreliable right now, so fail
       // open with an empty list rather than crashing the screen.
@@ -239,7 +344,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
           children: [
             _buildFilterAndSort(context),
             Expanded(
-              child: _isLoading
+              child: _isLoading || _isRefreshing
                   ? _buildLoadingState(context)
                   : Stack(
                       alignment: Alignment.topCenter,

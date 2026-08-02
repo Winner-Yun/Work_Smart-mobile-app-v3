@@ -50,4 +50,17 @@ class RequestModel {
     }
     return const [];
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'workspace_id': workspaceId,
+    'user_id': userId,
+    'title': title,
+    'description': description,
+    'attachments': attachments,
+    'status': status,
+    'response': response,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt?.toIso8601String(),
+  };
 }

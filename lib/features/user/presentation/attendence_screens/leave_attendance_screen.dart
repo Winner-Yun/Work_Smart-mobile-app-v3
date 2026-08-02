@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
@@ -85,14 +87,12 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     }
   }
 
-  /// Resolves the workspace, then waits for the policy to be fetched fresh
-  /// from the server before loading the leave list — the skeleton stays up
-  /// for this whole span, so the screen never flashes the hardcoded
-  /// fallback totals (or a stale cached value) before jumping to the real
-  /// numbers a moment later. Previously the policy fetch ran unawaited in
-  /// the background after the skeleton was already dismissed, so a fresh
-  /// install (or a cleared cache) would visibly pop from `_defaultSickTotal`
-  /// / `_defaultAnnualTotal` to the real limits post-render.
+  /// Cache-first: render whatever's cached locally (policy + leave list)
+  /// immediately — no blocking skeleton — then silently refresh both from
+  /// the server in the background and update in place only if something
+  /// actually changed. A true cold start (neither cached) is the only case
+  /// that still waits on the network, since there's nothing meaningful to
+  /// show otherwise.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -102,9 +102,107 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       return;
     }
 
-    await _fetchPolicyFromServer();
-    await _loadData();
+    final String workspaceId = _workspaceId!;
+    final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
+      workspaceId,
+    );
+    final List<LeaveModel>? cachedLeaves = await _readCachedLeaves(
+      prefs,
+      workspaceId,
+    );
+
+    final bool hasLocalData = cachedPolicyMap != null || cachedLeaves != null;
+
+    if (hasLocalData) {
+      _applyPolicyLimits(cachedPolicyMap);
+      // Keep the skeleton up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (mounted) {
+        setState(() {
+          _leaveRecords = cachedLeaves ?? <LeaveModel>[];
+          _applyLeaveComputations();
+          _isLoading = false;
+        });
+      }
+      unawaited(_refreshFromServerInBackground());
+    } else {
+      await _fetchPolicyFromServer();
+      await _loadData();
+    }
   }
+
+  /// Silently re-fetches policy + leave list from the server after the
+  /// cache-first render above, and updates the UI in place only if the
+  /// fetched data actually differs from what's already shown.
+  Future<void> _refreshFromServerInBackground() async {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    await _fetchPolicyFromServer();
+
+    try {
+      final List<LeaveModel> fetchedLeaves = await _leaveRepo.getMyLeaves(
+        workspaceId,
+      );
+
+      final bool leavesChanged =
+          jsonEncode(_leaveRecords.map((l) => l.toJson()).toList()) !=
+          jsonEncode(fetchedLeaves.map((l) => l.toJson()).toList());
+
+      if (leavesChanged) {
+        if (!mounted) return;
+        setState(() {
+          _leaveRecords = fetchedLeaves;
+          _applyLeaveComputations();
+        });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await _saveCachedLeaves(prefs, workspaceId, fetchedLeaves);
+    } catch (e) {
+      // Best-effort background refresh; the cache-first data already on
+      // screen stays put on failure.
+      debugPrint(
+        '[LeaveAttendanceScreen] Background leave refresh failed: $e',
+      );
+    }
+  }
+
+  /// Reads the cached leave list (SharedPreferences JSON array of
+  /// `LeaveModel.toJson()`) for [workspaceId]. Returns null if nothing is
+  /// cached or it fails to decode.
+  Future<List<LeaveModel>?> _readCachedLeaves(
+    SharedPreferences prefs,
+    String workspaceId,
+  ) async {
+    final String? raw = prefs.getString(_leavesCacheKey(workspaceId));
+    if (raw == null) return null;
+    try {
+      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((e) => LeaveModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint(
+        '[LeaveAttendanceScreen] Failed to decode cached leaves: $e',
+      );
+      return null;
+    }
+  }
+
+  Future<void> _saveCachedLeaves(
+    SharedPreferences prefs,
+    String workspaceId,
+    List<LeaveModel> leaves,
+  ) async {
+    final String encoded = jsonEncode(
+      leaves.map((l) => l.toJson()).toList(),
+    );
+    await prefs.setString(_leavesCacheKey(workspaceId), encoded);
+  }
+
+  String _leavesCacheKey(String workspaceId) => 'cached_leaves_$workspaceId';
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -116,9 +214,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     }
 
     // Leave totals come from the workspace policy, cached locally — read it
-    // here instead of hardcoding limits. By the time this runs on initial
-    // load, `_loadInitialData` has already awaited a fresh server fetch, so
-    // this is normally reading back what that fetch just saved.
+    // here instead of hardcoding limits.
     final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
       _workspaceId!,
     );
@@ -129,25 +225,33 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _leaveRecords = leaves;
-
-        _annualUsed = _sumUsedDays(
-          (type) => type.contains('annual') || type.contains('casual'),
-        );
-        _sickUsed = _sumUsedDays((type) => type.contains('sick'));
-
-        _annualRemaining = (_annualTotal - _annualUsed).clamp(0, _annualTotal);
-        _sickRemaining = (_sickTotal - _sickUsed).clamp(0, _sickTotal);
-
-        _history = _leaveRecords.toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _applyLeaveComputations();
         _isLoading = false;
       });
+      await _saveCachedLeaves(prefs, _workspaceId!, leaves);
     } catch (e) {
       // The list endpoint is known to be unreliable right now, so fail
       // open with an empty list rather than crashing the screen.
       debugPrint('[LeaveAttendanceScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Recomputes used/remaining totals and the sorted history from
+  /// `_leaveRecords` + the current policy totals. Shared by the cache-load
+  /// path, the network-fetch path, and the background refresh path so the
+  /// computation only lives in one place.
+  void _applyLeaveComputations() {
+    _annualUsed = _sumUsedDays(
+      (type) => type.contains('annual') || type.contains('casual'),
+    );
+    _sickUsed = _sumUsedDays((type) => type.contains('sick'));
+
+    _annualRemaining = (_annualTotal - _annualUsed).clamp(0, _annualTotal);
+    _sickRemaining = (_sickTotal - _sickUsed).clamp(0, _sickTotal);
+
+    _history = _leaveRecords.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void _applyPolicyLimits(Map<String, dynamic>? policyMap) {

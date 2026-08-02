@@ -99,6 +99,25 @@ class AttendanceModel {
     'status': status,
   };
 
+  // Full round-trip shape (accepted back by fromJson) used for local
+  // caching — toLegacyMap() above deliberately drops fields the UI doesn't
+  // need, which would lose data if used to re-hydrate a cached list.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'workspace_id': workspaceId,
+    'user_id': uid,
+    'date': date,
+    'check_in': checkIn,
+    'check_out': checkOut,
+    'total_hours': totalHours,
+    'status': status,
+    'latitude': latitude,
+    'longitude': longitude,
+    'face_verified': faceVerified,
+    'liveness_verified': livenessVerified,
+    'mock_location_detected': mockLocationDetected,
+  };
+
   static String? _readString(Map<String, dynamic> json, List<String> keys) {
     for (final key in keys) {
       final value = json[key];

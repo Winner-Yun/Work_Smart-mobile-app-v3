@@ -56,4 +56,19 @@ class TaskModel {
     }
     return const [];
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'workspace_id': workspaceId,
+    'created_by': createdBy,
+    'title': title,
+    'description': description,
+    'visibility': visibility,
+    'assigned_to': assignedTo,
+    'deadline': deadline,
+    'priority': priority,
+    'status': status,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt?.toIso8601String(),
+  };
 }

@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/config/theme_manager.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
@@ -28,7 +29,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
 
-  const ProfileScreen({super.key, this.loginData});
+  // Update Face needs an active workspace context to make sense — hide it
+  // while the user is still on the workspace picker (no workspace selected).
+  final bool hasWorkspace;
+
+  const ProfileScreen({
+    super.key,
+    this.loginData,
+    this.hasWorkspace = true,
+  });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -75,25 +84,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context, rootNavigator: true).pop();
   }
 
+  // Cache-first: render whatever's cached locally immediately (no blocking
+  // skeleton), then silently refresh from the server in the background and
+  // update in place only if something actually changed. A true cold start
+  // (nothing cached yet) is the only case that still waits on the network,
+  // since there's nothing meaningful to show otherwise.
   Future<void> _loadData() async {
+    final cached = await DatabaseHelper().getUserProfile();
+    if (cached != null) {
+      _currentUser = UserModel.fromJson(cached);
+    }
+
+    final bool hasLocalData = _currentUser != null;
+
+    if (hasLocalData) {
+      unawaited(_loadWorkspaceName());
+      // Keep the skeleton up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      unawaited(_refreshProfileFromServer());
+    } else {
+      await _loadWorkspaceName();
+      await _refreshProfileFromServer();
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _refreshProfileFromServer() async {
     try {
       final UserModel user = await _userRepo.getUserProfile();
       await DatabaseHelper().saveUserProfile(user.toJson());
-      if (mounted) {
-        setState(() => _currentUser = user);
+      final bool changed =
+          _currentUser == null ||
+          jsonEncode(user.toJson()) != jsonEncode(_currentUser!.toJson());
+      _currentUser = user;
+      if (changed && mounted) {
+        setState(() {});
       }
     } catch (e) {
       debugPrint('[ProfileScreen] Failed to load profile from server: $e');
-      final cached = await DatabaseHelper().getUserProfile();
-      if (cached != null && mounted) {
-        setState(() => _currentUser = UserModel.fromJson(cached));
-      }
-    }
-
-    await _loadWorkspaceName();
-
-    if (mounted) {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -101,17 +135,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? selectedId = prefs.getString('selected_workspace_id');
-      final String? cachedJson = prefs.getString('cached_selected_workspace');
 
+      if (selectedId == null || selectedId.isEmpty) {
+        // No workspace currently selected — never fall back to a
+        // previously cached workspace name, or it'll look like the user
+        // is still in a workspace they've since left/switched out of.
+        if (mounted) setState(() => _workspaceName = null);
+        return;
+      }
+
+      final String? cachedJson = prefs.getString('cached_selected_workspace');
       if (cachedJson != null) {
         final Workspace cached = Workspace.fromJson(jsonDecode(cachedJson));
-        if (selectedId == null || cached.id == selectedId) {
+        if (cached.id == selectedId) {
           if (mounted) setState(() => _workspaceName = cached.workspaceName);
           return;
         }
       }
-
-      if (selectedId == null || selectedId.isEmpty) return;
 
       final List<Workspace> workspaces = await _workspaceRepo.getWorkspaces();
       if (workspaces.isEmpty) return;
@@ -203,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('profile_image_upload_failed')}: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
     } finally {
@@ -245,7 +285,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('profile_update_failed')}: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
       return false;
@@ -370,7 +410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     content: Text(
                                       AppStrings.tr('name_required'),
                                     ),
-                                    backgroundColor: Colors.red,
+                                    backgroundColor: Theme.of(context).colorScheme.primary,
                                   ),
                                 );
                                 return;
@@ -532,17 +572,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onTap: _showEditProfileSheet,
                         ),
                         _buildDivider(context),
-                        _buildNavRow(
-                          context,
-                          Icons.face_retouching_natural_rounded,
-                          AppStrings.tr('update_face_action'),
-                          Colors.teal,
-                          onTap: () => UpdateFaceFlowController.start(
+                        if (widget.hasWorkspace) ...[
+                          _buildNavRow(
                             context,
-                            loginData: widget.loginData,
+                            Icons.face_retouching_natural_rounded,
+                            AppStrings.tr('update_face_action'),
+                            Colors.teal,
+                            onTap: () => UpdateFaceFlowController.start(
+                              context,
+                              loginData: widget.loginData,
+                            ),
                           ),
-                        ),
-                        _buildDivider(context),
+                          _buildDivider(context),
+                        ],
                         _buildNavRow(
                           context,
                           Icons.headset_mic_rounded,

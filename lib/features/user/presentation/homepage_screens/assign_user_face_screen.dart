@@ -196,8 +196,10 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to update profile image: $e'),
-              backgroundColor: Colors.red,
+              content: Text(
+                '${AppStrings.tr('profile_photo_update_failed')}: $e',
+              ),
+              backgroundColor: Theme.of(context).colorScheme.primary,
             ),
           );
         } finally {
@@ -223,8 +225,8 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Navigation failed: $error'),
-          backgroundColor: Colors.red,
+          content: Text('${AppStrings.tr('navigation_failed')}: $error'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
     }

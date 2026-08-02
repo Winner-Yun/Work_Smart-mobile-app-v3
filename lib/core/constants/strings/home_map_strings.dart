@@ -48,9 +48,15 @@ const Map<String, String> homeMapStringsEn = {
   'profile_photo_option_desc': 'Would you like to crop this face image and use it as your profile photo?',
   'crop_and_use_profile': 'Use',
   'profile_photo_updated': 'Profile photo updated successfully.',
+  'profile_photo_update_failed': 'Failed to update profile image',
+  'navigation_failed': 'Navigation failed',
   'at': 'at',
   'time_placeholder': '--:--',
   'not_user': 'Not a registered user',
+  'location_permission_required_title': 'Location Permission Required',
+  'location_permission_required_message': 'Location access is needed to verify attendance range and update your office map status.',
+  'notification_permission_required_title': 'Notification Permission Required',
+  'notification_permission_required_message': 'Notifications keep you informed about attendance and leave status updates in real time.',
 };
 
 const Map<String, String> homeMapStringsKm = {
@@ -102,7 +108,13 @@ const Map<String, String> homeMapStringsKm = {
   'profile_photo_option_desc': 'តើអ្នកចង់កាត់រូបមុខនេះ ហើយប្រើជារូបភាពប្រវត្តិរូបរបស់អ្នកទេ?',
   'crop_and_use_profile': 'ប្រើប្រាស់',
   'profile_photo_updated': 'បានធ្វើបច្ចុប្បន្នភាពរូបភាពប្រវត្តិរូបដោយជោគជ័យ។',
+  'profile_photo_update_failed': 'មិនអាចធ្វើបច្ចុប្បន្នភាពរូបភាពប្រវត្តិរូបបានទេ',
+  'navigation_failed': 'ការនាំផ្លូវបានបរាជ័យ',
   'at': 'នៅ',
   'time_placeholder': '--:--',
   'not_user': 'មិនមែនជាអ្នកទេ',
+  'location_permission_required_title': 'ត្រូវការសិទ្ធិចូលប្រើទីតាំង',
+  'location_permission_required_message': 'ត្រូវការទីតាំងដើម្បីផ្ទៀងផ្ទាត់ចម្ងាយវត្តមាន និងធ្វើបច្ចុប្បន្នភាពស្ថានភាពផែនទីការិយាល័យ។',
+  'notification_permission_required_title': 'ត្រូវការសិទ្ធិជូនដំណឹង',
+  'notification_permission_required_message': 'ការជូនដំណឹងជួយអោយអ្នកដឹងអំពីវត្តមាន និងស្ថានភាពច្បាប់ឈប់សម្រាកជាបន្តបន្ទាប់។',
 };

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
@@ -10,7 +12,6 @@ import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,7 +70,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('annual_leave_no_remaining_days'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -82,7 +83,10 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             .replaceAll('{remainingDays}', _annualLeaveRemaining.toString());
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
     );
   }
 
@@ -94,7 +98,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('leave_date_already_requested'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -107,7 +111,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('leave_range_already_requested'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -120,7 +124,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('annual_leave_end_date_must_be_after_start'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -133,7 +137,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('leave_no_available_dates'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -163,21 +167,123 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     _loadInitialData();
   }
 
-  /// Resolves the workspace, then waits for the policy to be fetched fresh
-  /// from the server before loading the leave list, so the screen never
-  /// flashes the hardcoded fallback total (or a stale cached value) before
-  /// jumping to the real number a moment later.
+  /// Cache-first, background-refresh init: any cached policy or cached
+  /// leave list is applied immediately (no blocking spinner), then a
+  /// background fetch refreshes both from the server and updates
+  /// state/cache only if something actually changed. A true cold start
+  /// (nothing cached at all) still blocks on the network, since a
+  /// leave-quota form genuinely can't validate submissions without
+  /// knowing the limits.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
 
-    if (_workspaceId == null || _workspaceId!.isEmpty) {
+    final String? workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) {
       if (mounted) setState(() => _isLoadingLeaves = false);
       return;
     }
 
-    await _fetchPolicyFromServer();
-    await _loadData();
+    final Map<String, dynamic>? cachedPolicyMap = await DatabaseHelper()
+        .getCachedPolicy(workspaceId);
+    final List<LeaveModel>? cachedLeaves = _readCachedLeaves(
+      prefs.getString(_leavesCacheKey(workspaceId)),
+    );
+
+    final bool hasCache = cachedPolicyMap != null || cachedLeaves != null;
+
+    if (hasCache) {
+      // Keep the loading state up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (mounted) {
+        setState(() {
+          if (cachedPolicyMap != null) _applyPolicyLimit(cachedPolicyMap);
+          if (cachedLeaves != null) _myLeaves = cachedLeaves;
+          _recalculateQuota();
+          _isLoadingLeaves = false;
+        });
+      }
+      // Silently refresh from the network in the background.
+      unawaited(_refreshFromServer(workspaceId));
+    } else {
+      // Cold start: nothing cached anywhere, so block until the network
+      // responds.
+      await _refreshFromServer(workspaceId);
+      if (mounted) setState(() => _isLoadingLeaves = false);
+    }
+  }
+
+  static String _leavesCacheKey(String workspaceId) =>
+      'cached_leaves_$workspaceId';
+
+  /// Parses the cached leave list JSON (a JSON array of `LeaveModel.toJson()`
+  /// maps), stored under the same `cached_leaves_<workspaceId>` key used by
+  /// the leave list screens, so this screen benefits from whatever they most
+  /// recently cached (and vice versa).
+  List<LeaveModel>? _readCachedLeaves(String? leavesJson) {
+    if (leavesJson == null) return null;
+    try {
+      final List<dynamic> decoded = jsonDecode(leavesJson) as List<dynamic>;
+      return decoded
+          .map(
+            (e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList();
+    } catch (e) {
+      debugPrint(
+        '[AnnualLeaveRequestScreen] Failed to parse cached leaves: $e',
+      );
+      return null;
+    }
+  }
+
+  /// Refreshes policy + leave list from the server in parallel.
+  Future<void> _refreshFromServer(String workspaceId) async {
+    await Future.wait([
+      _fetchPolicyFromServer(),
+      _fetchLeavesFromServer(workspaceId),
+    ]);
+  }
+
+  /// Fetches the leave list fresh from the server, updates state only if it
+  /// actually differs from what's currently held (compared via jsonEncode),
+  /// and refreshes the local cache used on the next cold start.
+  Future<void> _fetchLeavesFromServer(String workspaceId) async {
+    try {
+      final leaves = await _leaveRepo.getMyLeaves(workspaceId);
+      if (!mounted) return;
+
+      final String newLeavesJson = jsonEncode(
+        leaves.map((leave) => leave.toJson()).toList(),
+      );
+      final String currentLeavesJson = jsonEncode(
+        _myLeaves.map((leave) => leave.toJson()).toList(),
+      );
+
+      if (newLeavesJson != currentLeavesJson) {
+        setState(() {
+          _myLeaves = leaves;
+          _recalculateQuota();
+        });
+      }
+
+      await _saveCachedLeaves(workspaceId, newLeavesJson);
+    } catch (e) {
+      // The list endpoint is known to be unreliable right now, so fail
+      // open and keep whatever is currently held (cache or previous
+      // state) rather than blocking the request form.
+      debugPrint('[AnnualLeaveRequestScreen] Failed to load leaves: $e');
+    }
+  }
+
+  Future<void> _saveCachedLeaves(String workspaceId, String leavesJson) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_leavesCacheKey(workspaceId), leavesJson);
+    } catch (e) {
+      debugPrint('[AnnualLeaveRequestScreen] Failed to cache leaves: $e');
+    }
   }
 
   void _onScroll() {
@@ -192,31 +298,24 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
   }
 
   /// Scroll-up-to-refresh for the quota/overlap data backing this form
-  /// (matches the homepage/leave-list gesture). Shows SystemLoadingDialog
-  /// over the form instead of the initial-load spinner, and always clears
-  /// via `finally` so a failed fetch can't leave the non-dismissible dialog
-  /// stuck or permanently block further pull-to-refresh attempts.
+  /// (matches the homepage/leave-list gesture). Swaps to the same
+  /// initial-load spinner (see `build`, gated on
+  /// `_isLoadingLeaves || _isRefreshing`) instead of a modal dialog over
+  /// the form, and always clears via `finally` so a failed fetch can't
+  /// permanently block further pull-to-refresh attempts.
   Future<void> _handleRefresh() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const SystemLoadingDialog(
-        title: 'Refreshing...',
-        subtitle: 'Getting the latest leave data',
-      ),
-    );
-
     try {
-      await _fetchPolicyFromServer();
-      await _loadData();
+      final String? workspaceId = _workspaceId;
+      if (workspaceId != null && workspaceId.isNotEmpty) {
+        await _refreshFromServer(workspaceId);
+      }
     } catch (e) {
       debugPrint('[AnnualLeaveRequestScreen] refresh error: $e');
     } finally {
       if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
         setState(() => _isRefreshing = false);
       }
     }
@@ -229,40 +328,6 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             '')
         .toString()
         .trim();
-  }
-
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    _workspaceId = prefs.getString('selected_workspace_id');
-
-    if (_workspaceId == null || _workspaceId!.isEmpty) {
-      if (mounted) setState(() => _isLoadingLeaves = false);
-      return;
-    }
-
-    // Leave totals come from the workspace policy, cached locally — read it
-    // here instead of hardcoding the limit. By the time this runs on
-    // initial load, `_loadInitialData` has already awaited a fresh server
-    // fetch, so this is normally reading back what that fetch just saved.
-    final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
-      _workspaceId!,
-    );
-    _applyPolicyLimit(cachedPolicyMap);
-
-    try {
-      final leaves = await _leaveRepo.getMyLeaves(_workspaceId!);
-      if (!mounted) return;
-      setState(() {
-        _myLeaves = leaves;
-        _recalculateQuota();
-        _isLoadingLeaves = false;
-      });
-    } catch (e) {
-      // The list endpoint is known to be unreliable right now, so fail
-      // open with an empty list rather than blocking the request form.
-      debugPrint('[AnnualLeaveRequestScreen] Failed to load leaves: $e');
-      if (mounted) setState(() => _isLoadingLeaves = false);
-    }
   }
 
   void _applyPolicyLimit(Map<String, dynamic>? policyMap) {
@@ -309,13 +374,13 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           jsonEncode(cachedPolicyMap) != jsonEncode(policyMap);
       if (policyChanged) {
         await DatabaseHelper().saveCachedPolicy(workspaceId, policyMap);
-      }
 
-      if (!mounted) return;
-      setState(() {
-        _applyPolicyLimit(policyMap);
-        _recalculateQuota();
-      });
+        if (!mounted) return;
+        setState(() {
+          _applyPolicyLimit(policyMap);
+          _recalculateQuota();
+        });
+      }
     } catch (e) {
       // Policy refresh is best-effort; fall back to whatever is cached.
       debugPrint('[AnnualLeaveRequestScreen] Failed to refresh policy: $e');
@@ -387,7 +452,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             AppStrings.tr('unable_to_resolve_user_id'),
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
       return;
@@ -440,7 +505,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             '${AppStrings.tr('leave_request_submit_failed')}: ${_describeError(submitError)}',
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
       return;
@@ -476,7 +541,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
-      body: _isLoadingLeaves
+      body: _isLoadingLeaves || _isRefreshing
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               alignment: Alignment.topCenter,

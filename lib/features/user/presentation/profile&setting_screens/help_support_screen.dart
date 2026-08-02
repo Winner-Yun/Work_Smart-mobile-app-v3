@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -13,6 +15,46 @@ class HelpSupportScreen extends StatefulWidget {
 
 class _HelpSupportScreenState extends State<HelpSupportScreen> {
   int? _expandedFaqIndex;
+  String? _appVersion;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => _appVersion = '${info.version}+${info.buildNumber}');
+      }
+    } catch (e) {
+      debugPrint('[HelpSupportScreen] Failed to load app version: $e');
+    }
+  }
+
+  Future<void> _handleLanguageChange(String langCode) async {
+    if (LanguageManager().locale == langCode) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(30),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color,
+            borderRadius: BorderRadius.circular(25),
+          ),
+          child: const CircularProgressIndicator(),
+        ),
+      ),
+    );
+    await LanguageManager().changeLanguage(langCode);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,43 +84,45 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildSectionHeader(AppStrings.tr('language_label'), context),
+            const SizedBox(height: 15),
+            _buildLanguageCard(context),
+            const SizedBox(height: 30),
             _buildSectionHeader(AppStrings.tr('contact_us'), context),
             const SizedBox(height: 15),
             _buildSupportCard(
               context,
               icon: Icons.headset_mic_rounded,
               title: AppStrings.tr('customer_service'),
-              subtitle: AppStrings.tr('quick_response'),
+              subtitle: '+855 81 513 746',
               color: Colors.blue,
-              onTap: () {},
             ),
             const SizedBox(height: 15),
             _buildSupportCard(
               context,
               icon: Icons.mail_rounded,
               title: AppStrings.tr('send_email'),
-              subtitle: 'support@worksmart.kh',
+              subtitle: 'winnerlegendpvh1426@gmail.com',
               color: Colors.orange,
-              onTap: () {},
             ),
             const SizedBox(height: 30),
             _buildSectionHeader(AppStrings.tr('faq_title'), context),
             const SizedBox(height: 15),
             _buildFAQTile(
-              question: AppStrings.tr('faq_change_pass'),
-              answer: AppStrings.tr('faq_change_pass_answer'),
+              question: AppStrings.tr('faq_join_workspace'),
+              answer: AppStrings.tr('faq_join_workspace_answer'),
               index: 0,
               context: context,
             ),
             _buildFAQTile(
-              question: AppStrings.tr('faq_connect_tele'),
-              answer: AppStrings.tr('faq_connect_tele_answer'),
+              question: AppStrings.tr('faq_register_scan_face'),
+              answer: AppStrings.tr('faq_register_scan_face_answer'),
               index: 1,
               context: context,
             ),
             _buildFAQTile(
-              question: AppStrings.tr('faq_login_issue'),
-              answer: AppStrings.tr('faq_login_issue_answer'),
+              question: AppStrings.tr('faq_update_face_again'),
+              answer: AppStrings.tr('faq_update_face_again_answer'),
               index: 2,
               context: context,
             ),
@@ -101,13 +145,14 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1, end: 0);
   }
 
+  // Display-only info card (no tap action) — used for contact details that
+  // are for reading, not for triggering anything, so no ripple or chevron.
   Widget _buildSupportCard(
     BuildContext context, {
     required IconData icon,
     required String title,
     required String subtitle,
     required Color color,
-    required VoidCallback onTap,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -121,60 +166,133 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 26),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textGrey,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: AppColors.textGrey,
-                ),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 26),
             ),
-          ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textGrey,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2, end: 0);
+  }
+
+  Widget _buildLanguageCard(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.translate_rounded,
+                color: Colors.teal,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Text(
+                AppStrings.tr('language_label'),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).dividerColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildLangChip('ខ្មែរ', 'km', context),
+                  _buildLangChip('EN', 'en', context),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.2, end: 0);
+  }
+
+  Widget _buildLangChip(String text, String code, BuildContext context) {
+    final bool active = LanguageManager().locale == code;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: active ? null : () => _handleLanguageChange(code),
+      child: AnimatedContainer(
+        duration: 250.ms,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active
+              ? Theme.of(context).scaffoldBackgroundColor
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: active ? FontWeight.bold : FontWeight.w500,
+            color: active
+                ? (isDark ? Colors.white : Theme.of(context).colorScheme.primary)
+                : Colors.grey,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildFAQTile({
@@ -266,9 +384,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const Text(
-            'Version 1.0.0',
-            style: TextStyle(color: AppColors.textGrey, fontSize: 12),
+          Text(
+            _appVersion == null ? '' : 'Version $_appVersion',
+            style: const TextStyle(color: AppColors.textGrey, fontSize: 12),
           ),
         ],
       ),

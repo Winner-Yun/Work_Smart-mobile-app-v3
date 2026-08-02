@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/task_detail_screen.dart';
@@ -24,35 +27,171 @@ class _TaskScreenState extends State<TaskScreen> {
   List<TaskModel> _tasks = <TaskModel>[];
   String? _workspaceId;
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _scrolledUp = false;
+
+  /// Whether a refresh (manual pull-to-refresh or silent background
+  /// refresh) is currently in flight. Drives the overscroll indicator in
+  /// `_buildPullToRefreshIndicator` (matches the homepage/leave-screen
+  /// gesture).
+  bool get isRefreshing => _isRefreshing;
+
+  SharedPreferences? _prefs;
+  late final ScrollController _scrollController;
+
+  String? get _cacheKey => (_workspaceId == null || _workspaceId!.isEmpty)
+      ? null
+      : 'cached_tasks_$_workspaceId';
 
   @override
   void initState() {
     super.initState();
-    _loadTasks();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+    _initData();
   }
 
-  Future<void> _loadTasks() async {
-    if (mounted) setState(() => _isLoading = true);
+  // Matches the homepage/leave-screen overscroll gesture: drag past the
+  // top past a threshold, then release to trigger a refresh.
+  void _onScroll() {
+    if (_scrollController.position.pixels < -100 &&
+        !_scrolledUp &&
+        !_isRefreshing) {
+      _scrolledUp = true;
+      _loadTasks();
+    } else if (_scrollController.position.pixels >= -10) {
+      _scrolledUp = false;
+    }
+  }
 
-    final prefs = await SharedPreferences.getInstance();
-    _workspaceId = prefs.getString('selected_workspace_id');
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Cache-first init: load whatever is cached locally and show it
+  /// immediately (no blocking skeleton), then silently refresh from the
+  /// network in the background. Only shows the skeleton loader on a true
+  /// cold start (no cached data at all).
+  Future<void> _initData() async {
+    _prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    _workspaceId = _prefs!.getString('selected_workspace_id');
 
     if (_workspaceId == null || _workspaceId!.isEmpty) {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
 
-    try {
-      final tasks = await _taskRepo.getWorkspaceTasks(_workspaceId!);
+    final bool hasLocalData = await _loadFromLocal();
+
+    if (!mounted) return;
+
+    if (hasLocalData) {
+      // Keep the skeleton up briefly even though the cache read was
+      // instant, so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
+      setState(() => _isLoading = false);
+      // Always refresh in the background on screen open.
+      _fetchFromNetwork(showLoading: false);
+    } else {
+      // No local data at all -> need network with loader.
+      await _fetchFromNetwork(showLoading: true);
+    }
+  }
+
+  /// Loads the cached task list from SharedPreferences, if any.
+  /// Returns true if any cached tasks were found.
+  Future<bool> _loadFromLocal() async {
+    final prefs = _prefs;
+    final cacheKey = _cacheKey;
+    if (prefs == null || cacheKey == null) return false;
+
+    final cachedJson = prefs.getString(cacheKey);
+    if (cachedJson == null) return false;
+
+    try {
+      final List<dynamic> decoded = jsonDecode(cachedJson);
+      _tasks =
+          decoded
+              .map((json) => TaskModel.fromJson(json as Map<String, dynamic>))
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return _tasks.isNotEmpty;
+    } catch (e) {
+      debugPrint('[TaskScreen] Error parsing cached tasks: $e');
+      return false;
+    }
+  }
+
+  /// Fetches tasks from the network and updates the UI + cache only if
+  /// the freshly-fetched list actually differs from what's in memory.
+  Future<void> _fetchFromNetwork({required bool showLoading}) async {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+
+    if (mounted) {
       setState(() {
-        _tasks = tasks..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        _isLoading = false;
+        if (showLoading) {
+          _isLoading = true;
+        } else {
+          _isRefreshing = true;
+        }
       });
+    }
+
+    try {
+      final tasks = await _taskRepo.getWorkspaceTasks(workspaceId)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!mounted) return;
+
+      final newJson = jsonEncode(tasks.map((t) => t.toJson()).toList());
+      final currentJson = jsonEncode(_tasks.map((t) => t.toJson()).toList());
+
+      if (newJson != currentJson) {
+        setState(() {
+          _tasks = tasks;
+          _isLoading = false;
+          _isRefreshing = false;
+        });
+        await _saveToCache(newJson);
+      } else {
+        setState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+        });
+      }
     } catch (e) {
       debugPrint('[TaskScreen] Failed to load tasks: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+        });
+      }
     }
+  }
+
+  Future<void> _saveToCache(String tasksJson) async {
+    final prefs = _prefs;
+    final cacheKey = _cacheKey;
+    if (prefs == null || cacheKey == null) return;
+    try {
+      await prefs.setString(cacheKey, tasksJson);
+    } catch (e) {
+      debugPrint('[TaskScreen] Error saving tasks cache: $e');
+    }
+  }
+
+  /// Manual pull-to-refresh (triggered by the overscroll gesture, see
+  /// `_onScroll`): an explicit user action, fetches from the network
+  /// directly and updates the cache on success.
+  Future<void> _loadTasks() async {
+    await _fetchFromNetwork(showLoading: false);
   }
 
   Future<void> _openTaskDetail(TaskModel task) async {
@@ -101,7 +240,7 @@ class _TaskScreenState extends State<TaskScreen> {
         return AppColors.warning;
       case 'pending':
       default:
-        return AppColors.textGrey;
+        return AppColors.warning;
     }
   }
 
@@ -156,34 +295,106 @@ class _TaskScreenState extends State<TaskScreen> {
       ),
       body: _isLoading
           ? const TaskSkeletonLoading()
-          : RefreshIndicator(
-              color: Theme.of(context).colorScheme.primary,
-              onRefresh: _loadTasks,
-              child: _tasks.isEmpty
-                  ? ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: [
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.6,
-                          child: DataEmptyState(
-                            imageAsset: AppImg.emptyState,
-                            message: 'No tasks yet',
-                          ),
-                        ).animate().fadeIn(duration: 300.ms),
-                      ],
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(20),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: _tasks.length,
-                      itemBuilder: (context, index) {
-                        return _buildTaskItem(_tasks[index])
-                            .animate()
-                            .fadeIn(delay: (60 * index).ms, duration: 240.ms)
-                            .slideY(begin: 0.08, end: 0, curve: Curves.easeOut);
-                      },
-                    ),
+          : Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                _tasks.isEmpty
+                    ? ListView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.6,
+                            child: DataEmptyState(
+                              imageAsset: AppImg.emptyState,
+                              message: 'No tasks yet',
+                            ),
+                          ).animate().fadeIn(duration: 300.ms),
+                        ],
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(20),
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        itemCount: _tasks.length,
+                        itemBuilder: (context, index) {
+                          return _buildTaskItem(_tasks[index])
+                              .animate()
+                              .fadeIn(delay: (60 * index).ms, duration: 240.ms)
+                              .slideY(
+                                begin: 0.08,
+                                end: 0,
+                                curve: Curves.easeOut,
+                              );
+                        },
+                      ),
+                _buildPullToRefreshIndicator(),
+              ],
             ),
+    );
+  }
+
+  // Matches the homepage/leave-screen overscroll gesture: drag past the top,
+  // the arrow rotates and fills in, release past ~95% to trigger a refresh
+  // (see _onScroll).
+  Widget _buildPullToRefreshIndicator() {
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        if (!_scrollController.hasClients) return const SizedBox.shrink();
+
+        double overscroll = _scrollController.position.pixels < 0
+            ? -_scrollController.position.pixels
+            : 0.0;
+
+        if (overscroll <= 0 || _isRefreshing) {
+          return const SizedBox.shrink();
+        }
+
+        double progress = (overscroll / 100.0).clamp(0.0, 1.0);
+        bool isReadyToRelease = progress >= 0.95;
+
+        return Positioned(
+          top: 10 + (overscroll * 0.2),
+          child: Opacity(
+            opacity: progress,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).cardTheme.color ??
+                    (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade800
+                        : Colors.white),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Transform.rotate(
+                angle: progress * 6.28,
+                child: Icon(
+                  isReadyToRelease
+                      ? Icons.refresh_rounded
+                      : Icons.arrow_downward_rounded,
+                  color: isReadyToRelease
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade500,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

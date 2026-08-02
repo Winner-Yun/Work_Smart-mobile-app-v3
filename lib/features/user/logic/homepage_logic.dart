@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/map_styles.dart';
@@ -32,7 +33,6 @@ import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
-import 'package:flutter_worksmart_app/shared/widget/common/system_loading_dialog.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -124,6 +124,12 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
 
   // --- UI State Tracking ---
   bool isInitialDataLoading = true;
+
+  // Set only by the manual pull-to-refresh gesture (onRefresh) — separate
+  // from `isRefreshing`, which is also flipped by the silent background
+  // refresh in `_loadAllData`/`refreshAttendanceFromServer` and must never
+  // trigger the skeleton (that would defeat the cache-first pattern).
+  bool isManualRefreshing = false;
 
   bool isInRange = false;
 

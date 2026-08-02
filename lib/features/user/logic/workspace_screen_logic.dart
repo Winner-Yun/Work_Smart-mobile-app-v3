@@ -1,12 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/workspace_screen.dart';
 import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/workspace_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
-import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/workspace_screen.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,6 +71,10 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
     final bool hasAnyLocalData = hasLocalUser || hasLocalWorkspaces;
 
     if (hasAnyLocalData) {
+      // Keep the loader up briefly even though the cache read was instant,
+      // so loading doesn't read as a jarring instant pop-in.
+      await Future.delayed(AppDurations.minSkeletonDisplay);
+      if (!mounted) return;
       // Show local data immediately, no full-screen loader
       setState(() {
         isLoading = false;

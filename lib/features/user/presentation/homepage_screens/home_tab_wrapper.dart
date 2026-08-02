@@ -9,12 +9,14 @@ class HomeTabWrapper extends StatefulWidget {
   final Map<String, dynamic>? loginData;
   final VoidCallback onStartupFlowCompleted;
   final VoidCallback onProfileTap;
+  final ValueChanged<bool>? onWorkspaceStatusChanged;
 
   const HomeTabWrapper({
     super.key,
     this.loginData,
     required this.onStartupFlowCompleted,
     required this.onProfileTap,
+    this.onWorkspaceStatusChanged,
   });
 
   @override
@@ -41,6 +43,7 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
         _selectedWorkspaceId = savedId;
         _isLoading = false;
       });
+      _notifyWorkspaceStatus();
     }
   }
 
@@ -52,20 +55,30 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
       setState(() {
         _selectedWorkspaceId = workspaceId;
       });
+      _notifyWorkspaceStatus();
     }
   }
 
   Future<void> _handleSwitchWorkspace() async {
-    // Clear the saved workspace ID from storage so the user is
-    // forced to re-select a workspace on the next app start.
+    // Clear the saved workspace ID (and its cached name) from storage so
+    // the user is forced to re-select a workspace on the next app start,
+    // and other screens don't keep showing the stale workspace name.
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_workspaceIdKey);
+    await prefs.remove('cached_selected_workspace');
 
     if (mounted) {
       setState(() {
         _selectedWorkspaceId = null;
       });
+      _notifyWorkspaceStatus();
     }
+  }
+
+  void _notifyWorkspaceStatus() {
+    final bool hasWorkspace =
+        _selectedWorkspaceId != null && _selectedWorkspaceId!.isNotEmpty;
+    widget.onWorkspaceStatusChanged?.call(hasWorkspace);
   }
 
   @override
@@ -80,6 +93,7 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
         loginData: widget.loginData,
         onWorkspaceConfirmed:
             _handleWorkspaceSelected, // Trigger switch to Home
+        onProfileTap: widget.onProfileTap,
       );
     }
 

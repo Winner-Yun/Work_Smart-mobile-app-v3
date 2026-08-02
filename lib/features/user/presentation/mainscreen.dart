@@ -27,6 +27,12 @@ class _MainScreenState extends State<MainScreen> {
   bool _cachedPasswordUsesDefault = false;
   bool _isHomeStartupFlowCompleted = false;
 
+  // Until a workspace is confirmed, only the Home (workspace picker) and
+  // Profile tabs make sense — the rest need a workspace context to function.
+  bool _hasWorkspace = false;
+  static const int _homeTabIndex = 0;
+  static const int _profileTabIndex = 4;
+
   @override
   void initState() {
     super.initState();
@@ -113,6 +119,12 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
+    // grey.shade300 reads as a muted/disabled icon on a light background,
+    // but on a dark background it's nearly as bright as the enabled icons —
+    // use a darker shade there so disabled tabs still look disabled.
+    final Color disabledNavIconColor = isDark
+        ? Colors.grey.shade700
+        : Colors.grey.shade300;
 
     final List<Widget> screens = [
       HomeTabWrapper(
@@ -124,14 +136,27 @@ class _MainScreenState extends State<MainScreen> {
         },
         onProfileTap: () {
           setState(() {
-            _currentIndex = 4;
+            _currentIndex = _profileTabIndex;
+          });
+        },
+        onWorkspaceStatusChanged: (hasWorkspace) {
+          if (_hasWorkspace == hasWorkspace) return;
+          setState(() {
+            _hasWorkspace = hasWorkspace;
+            // If workspace access was revoked while on a tab that needs
+            // one, snap back to Home (the workspace picker) immediately.
+            if (!_hasWorkspace &&
+                _currentIndex != _homeTabIndex &&
+                _currentIndex != _profileTabIndex) {
+              _currentIndex = _homeTabIndex;
+            }
           });
         },
       ),
       AttendanceStatsScreen(loginData: widget.loginData),
       LeaveAttendanceScreen(loginData: widget.loginData),
       RequestScreen(loginData: widget.loginData),
-      ProfileScreen(loginData: widget.loginData),
+      ProfileScreen(loginData: widget.loginData, hasWorkspace: _hasWorkspace),
     ];
 
     Widget scaffoldBody = Scaffold(
@@ -148,7 +173,21 @@ class _MainScreenState extends State<MainScreen> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) {
+            final bool isRestricted =
+                !_hasWorkspace &&
+                index != _homeTabIndex &&
+                index != _profileTabIndex;
+            if (isRestricted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(AppStrings.tr('select_workspace_first')),
+                ),
+              );
+              return;
+            }
+            setState(() => _currentIndex = index);
+          },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Theme.of(context).cardTheme.color,
           selectedItemColor: Theme.of(context).colorScheme.primary,
@@ -162,15 +201,24 @@ class _MainScreenState extends State<MainScreen> {
               label: AppStrings.tr('home_menu'),
             ),
             BottomNavigationBarItem(
-              icon: const Icon(Icons.how_to_reg),
+              icon: Icon(
+                Icons.how_to_reg,
+                color: _hasWorkspace ? null : disabledNavIconColor,
+              ),
               label: AppStrings.tr('atd_menu'),
             ),
             BottomNavigationBarItem(
-              icon: const Icon(Icons.beach_access),
+              icon: Icon(
+                Icons.beach_access,
+                color: _hasWorkspace ? null : disabledNavIconColor,
+              ),
               label: AppStrings.tr('leave_menu'),
             ),
             BottomNavigationBarItem(
-              icon: const Icon(Icons.description_outlined),
+              icon: Icon(
+                Icons.description_outlined,
+                color: _hasWorkspace ? null : disabledNavIconColor,
+              ),
               label: AppStrings.tr('request_menu'),
             ),
             BottomNavigationBarItem(
