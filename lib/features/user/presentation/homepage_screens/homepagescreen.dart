@@ -323,7 +323,7 @@ class _HomePageScreenState extends HomePageLogic {
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            '$workspaceMemberCount Members',
+                            '$workspaceMemberCount ${AppStrings.tr('members')}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -353,7 +353,7 @@ class _HomePageScreenState extends HomePageLogic {
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            '${scanRangeMeters.toInt()}m Zone',
+                            '${scanRangeMeters.toInt()}m ${AppStrings.tr('zone')}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -379,7 +379,7 @@ class _HomePageScreenState extends HomePageLogic {
                             MainAxisSize.min, // Ensures tight fit inside Wrap
                         children: [
                           Text(
-                            'Switch',
+                            AppStrings.tr('switch'),
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,

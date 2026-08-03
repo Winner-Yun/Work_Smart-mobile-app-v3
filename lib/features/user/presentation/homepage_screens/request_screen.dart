@@ -37,10 +37,11 @@ class _RequestScreenState extends State<RequestScreen> {
   bool _isRefreshing = false;
   bool _scrolledUp = false;
 
-  /// Whether a refresh (manual pull-to-refresh or silent background
-  /// refresh) is currently in flight. Drives the overscroll indicator in
-  /// `_buildPullToRefreshIndicator` (matches the homepage/leave-screen
-  /// gesture).
+  /// Whether a manual pull-to-refresh (or post-create refresh) is currently
+  /// in flight. Swaps the whole screen to the skeleton loader (see
+  /// `build`), matching the leave-management screen's pull-to-refresh
+  /// behavior — unlike the silent background refresh in `_initData`, which
+  /// never touches this flag.
   bool get isRefreshing => _isRefreshing;
 
   SharedPreferences? _prefs;
@@ -139,18 +140,15 @@ class _RequestScreenState extends State<RequestScreen> {
 
   /// Fetches requests from the network and updates the UI + cache only if
   /// the freshly-fetched list actually differs from what's in memory.
+  /// Only toggles `_isLoading` (cold-start skeleton) — `_isRefreshing` is
+  /// owned by `_loadRequests`, since this is also called for the silent
+  /// background refresh in `_initData`, which must stay invisible.
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
     final workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
 
-    if (mounted) {
-      setState(() {
-        if (showLoading) {
-          _isLoading = true;
-        } else {
-          _isRefreshing = true;
-        }
-      });
+    if (showLoading && mounted) {
+      setState(() => _isLoading = true);
     }
 
     try {
@@ -165,22 +163,15 @@ class _RequestScreenState extends State<RequestScreen> {
         setState(() {
           _requests = requests;
           _isLoading = false;
-          _isRefreshing = false;
         });
         await _saveToCache(newJson);
-      } else {
-        setState(() {
-          _isLoading = false;
-          _isRefreshing = false;
-        });
+      } else if (showLoading) {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('[RequestScreen] Failed to load requests: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isRefreshing = false;
-        });
+      if (mounted && showLoading) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -197,10 +188,20 @@ class _RequestScreenState extends State<RequestScreen> {
   }
 
   /// Manual pull-to-refresh (triggered by the overscroll gesture, see
-  /// `_onScroll`) / post-create refresh: an explicit user action, fetches
-  /// from the network directly and updates the cache on success.
+  /// `_onScroll`) / post-create refresh: swaps the whole screen to the
+  /// skeleton loader (see `build`, gated on `_isLoading || _isRefreshing`)
+  /// instead of leaving the small overscroll indicator over stale content,
+  /// and always clears `_isRefreshing` in `finally` — without that
+  /// guarantee, an uncaught error partway through would permanently disable
+  /// further pulls (`_onScroll` only fires while `!_isRefreshing`).
   Future<void> _loadRequests() async {
-    await _fetchFromNetwork(showLoading: false);
+    if (_isRefreshing || !mounted) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await _fetchFromNetwork(showLoading: false);
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   Future<void> _openCreateSheet() async {
@@ -265,14 +266,14 @@ class _RequestScreenState extends State<RequestScreen> {
   String _statusLabel(String status) {
     switch (status.toLowerCase()) {
       case 'in_progress':
-        return 'In Progress';
+        return AppStrings.tr('request_status_in_progress');
       case 'completed':
-        return 'Completed';
+        return AppStrings.tr('request_status_completed');
       case 'seen':
-        return 'Seen';
+        return AppStrings.tr('request_status_seen');
       case 'pending':
       default:
-        return 'Pending';
+        return AppStrings.tr('request_status_pending');
     }
   }
 
@@ -287,7 +288,7 @@ class _RequestScreenState extends State<RequestScreen> {
         automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
-          'Requests',
+          AppStrings.tr('request_menu'),
           style: TextStyle(
             color: Theme.of(context).colorScheme.primary,
             fontSize: 22,
@@ -302,7 +303,7 @@ class _RequestScreenState extends State<RequestScreen> {
         elevation: 2,
         child: const Icon(Icons.add, color: AppColors.textLight),
       ).animate().scale(delay: 200.ms, curve: Curves.easeOutBack),
-      body: _isLoading
+      body: _isLoading || _isRefreshing
           ? const RequestSkeletonLoading()
           : Stack(
               alignment: Alignment.topCenter,
@@ -318,7 +319,7 @@ class _RequestScreenState extends State<RequestScreen> {
                             height: MediaQuery.of(context).size.height * 0.6,
                             child: DataEmptyState(
                               imageAsset: AppImg.emptyState,
-                              message: 'No requests yet',
+                              message: AppStrings.tr('no_requests_yet'),
                             ),
                           ).animate().fadeIn(duration: 300.ms),
                         ],
@@ -360,7 +361,7 @@ class _RequestScreenState extends State<RequestScreen> {
             ? -_scrollController.position.pixels
             : 0.0;
 
-        if (overscroll <= 0 || _isRefreshing) {
+        if (overscroll <= 0 || _isLoading || _isRefreshing) {
           return const SizedBox.shrink();
         }
 
@@ -612,7 +613,7 @@ class _CreateRequestSheetState extends State<_CreateRequestSheet> {
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
           content: Text(
             '${AppStrings.tr('request_submit_failed')}: ${e.toString().replaceFirst('Exception: ', '')}',
             style: const TextStyle(color: AppColors.textLight),
@@ -697,7 +698,7 @@ class _CreateRequestSheetState extends State<_CreateRequestSheet> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'New Request',
+                    AppStrings.tr('new_request_title'),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -709,23 +710,29 @@ class _CreateRequestSheetState extends State<_CreateRequestSheet> {
               const SizedBox(height: 20),
               TextFormField(
                 controller: _titleController,
-                decoration: _fieldDecoration(context, 'Title'),
+                decoration: _fieldDecoration(
+                  context,
+                  AppStrings.tr('title_label'),
+                ),
                 validator: (value) => (value == null || value.trim().isEmpty)
-                    ? 'Title is required'
+                    ? AppStrings.tr('title_required')
                     : null,
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 4,
-                decoration: _fieldDecoration(context, 'Description'),
+                decoration: _fieldDecoration(
+                  context,
+                  AppStrings.tr('description_label'),
+                ),
                 validator: (value) => (value == null || value.trim().isEmpty)
-                    ? 'Description is required'
+                    ? AppStrings.tr('description_required')
                     : null,
               ),
               const SizedBox(height: 16),
               Text(
-                'Attachments (optional)',
+                AppStrings.tr('attachments_optional_label'),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -823,9 +830,9 @@ class _CreateRequestSheetState extends State<_CreateRequestSheet> {
                             ),
                           ),
                         )
-                      : const Text(
-                          'Submit Request',
-                          style: TextStyle(
+                      : Text(
+                          AppStrings.tr('submit_request_button'),
+                          style: const TextStyle(
                             color: AppColors.textLight,
                             fontWeight: FontWeight.bold,
                             fontSize: 15,

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
@@ -63,7 +64,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
           AppStrings.tr('sick_leave_no_remaining_days'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -333,7 +334,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppStrings.tr('attachment_type_not_allowed')),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: AppColors.error,
           ),
         );
         return;
@@ -350,7 +351,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
             '${AppStrings.tr('profile_image_upload_failed')}: $e',
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     }
@@ -383,7 +384,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
             AppStrings.tr('unable_to_resolve_user_id'),
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -423,7 +424,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
             '${AppStrings.tr('leave_request_submit_failed')}: ${_describeError(submitError)}',
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return;

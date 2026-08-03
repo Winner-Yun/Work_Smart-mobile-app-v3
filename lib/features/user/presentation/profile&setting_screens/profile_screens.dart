@@ -24,6 +24,7 @@ import 'package:flutter_worksmart_app/shared/widget/common/app_profile_avatar.da
 import 'package:flutter_worksmart_app/shared/widget/common/profile_skeleton_loading.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -33,11 +34,7 @@ class ProfileScreen extends StatefulWidget {
   // while the user is still on the workspace picker (no workspace selected).
   final bool hasWorkspace;
 
-  const ProfileScreen({
-    super.key,
-    this.loginData,
-    this.hasWorkspace = true,
-  });
+  const ProfileScreen({super.key, this.loginData, this.hasWorkspace = true});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -56,11 +53,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   File? _image;
   bool _isUploadingProfileImage = false;
   bool _isLoading = true;
+  bool _isUpdatingNotification = false;
+  String? _appVersion;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => _appVersion = '${info.version}+${info.buildNumber}');
+      }
+    } catch (e) {
+      debugPrint('[HelpSupportScreen] Failed to load app version: $e');
+    }
   }
 
   Future<void> _handleLanguageChange(String langCode) async {
@@ -68,20 +79,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => Center(
-        child: Container(
-          padding: const EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: const CircularProgressIndicator(),
-        ),
-      ),
+      builder: (_) => Center(child: CircularProgressIndicator()),
     );
     await LanguageManager().changeLanguage(langCode);
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  Future<void> _handleNotificationToggle(bool value) async {
+    if (_isUpdatingNotification) return;
+    setState(() => _isUpdatingNotification = true);
+
+    try {
+      final UserModel updated = await _userRepo.updateAllowNotification(value);
+      await DatabaseHelper().saveUserProfile(updated.toJson());
+      if (!mounted) return;
+      setState(() {
+        _currentUser = updated;
+        _isUpdatingNotification = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUpdatingNotification = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.tr('notification_update_failed')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   // Cache-first: render whatever's cached locally immediately (no blocking
@@ -243,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('profile_image_upload_failed')}: $e'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     } finally {
@@ -285,7 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('profile_update_failed')}: $e'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return false;
@@ -410,7 +436,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     content: Text(
                                       AppStrings.tr('name_required'),
                                     ),
-                                    backgroundColor: Theme.of(context).colorScheme.primary,
+                                    backgroundColor: AppColors.error,
                                   ),
                                 );
                                 return;
@@ -559,6 +585,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           (value) => ThemeManager().toggleTheme(value),
                         ),
                         _buildDivider(context),
+                        _buildToggleRow(
+                          context,
+                          Icons.notifications_active_rounded,
+                          AppStrings.tr('notification_label'),
+                          Colors.orange,
+                          _currentUser?.allowNotification ?? true,
+                          _handleNotificationToggle,
+                          isLoading: _isUpdatingNotification,
+                        ),
+                        _buildDivider(context),
                         _buildLanguageRow(context),
                       ]),
                       const SizedBox(height: 22),
@@ -602,7 +638,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           AppStrings.tr('about_app'),
                           Colors.indigo,
                           trailing: Text(
-                            'v1.2.4',
+                            _appVersion!,
                             style: TextStyle(
                               color: Colors.grey.shade400,
                               fontSize: 12,

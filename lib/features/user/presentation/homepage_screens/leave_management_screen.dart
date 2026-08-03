@@ -999,7 +999,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
                 activeSickRequests.toString(),
               ),
             ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: AppColors.error,
           ),
         );
         return;

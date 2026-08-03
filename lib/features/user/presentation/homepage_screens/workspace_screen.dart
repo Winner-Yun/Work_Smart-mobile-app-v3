@@ -115,7 +115,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
           content: Text(
             e.toString().replaceFirst('Exception: ', ''),
             style: const TextStyle(color: AppColors.textLight),
@@ -272,7 +272,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Welcome back,',
+                  AppStrings.tr('welcome_back'),
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
                 Text(
@@ -299,7 +299,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         Row(
           children: [
             Text(
-              'Select Workspace',
+              AppStrings.tr('select_workspace'),
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -329,7 +329,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         ),
         const SizedBox(height: 4),
         Text(
-          'Choose an active workspace to access your dashboard.',
+          AppStrings.tr('choose_workspace_desc'),
           style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
         ),
       ],
@@ -365,7 +365,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               textCapitalization: TextCapitalization.characters,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
               decoration: InputDecoration(
-                hintText: 'Enter invite code to join',
+                hintText: AppStrings.tr('enter_invite_code_hint'),
                 hintStyle: TextStyle(fontSize: 12, color: AppColors.textGrey),
                 border: InputBorder.none,
                 isDense: true,
@@ -393,14 +393,14 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
                       onTap: _joinWorkspaceByCode,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 8,
                         ),
                         child: Text(
-                          'Join',
-                          style: TextStyle(
+                          AppStrings.tr('join_button'),
+                          style: const TextStyle(
                             color: AppColors.textLight,
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -429,7 +429,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         style: const TextStyle(fontSize: 13),
         enabled: !isLoading && !isRefreshing,
         decoration: InputDecoration(
-          hintText: 'Search workspace...',
+          hintText: AppStrings.tr('search_workspace_hint'),
           hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
           prefixIcon: Icon(
             Icons.search_rounded,
@@ -550,7 +550,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
             ElevatedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Retry'),
+              label: Text(AppStrings.tr('retry_action')),
             ),
           ],
         ),
@@ -684,7 +684,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
             Text(
               workspace.description.isNotEmpty
                   ? workspace.description
-                  : 'No details provided',
+                  : AppStrings.tr('no_details_provided'),
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -841,8 +841,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
             const SizedBox(height: 16),
             Text(
               _searchQuery.isNotEmpty
-                  ? 'No Matching Workspaces'
-                  : 'No Workspace Yet',
+                  ? AppStrings.tr('no_matching_workspaces')
+                  : AppStrings.tr('no_workspace_yet'),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
@@ -850,8 +850,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               padding: const EdgeInsets.symmetric(horizontal: 32.0),
               child: Text(
                 _searchQuery.isNotEmpty
-                    ? 'Try searching with a different keyword.'
-                    : 'Ask your workspace admin for an invite code, then enter it above to join.',
+                    ? AppStrings.tr('try_different_keyword')
+                    : AppStrings.tr('ask_admin_invite_code'),
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                 textAlign: TextAlign.center,
               ),
@@ -861,7 +861,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               ElevatedButton.icon(
                 onPressed: () => _joinCodeFocusNode.requestFocus(),
                 icon: const Icon(Icons.vpn_key_rounded, size: 18),
-                label: const Text('Enter Invite Code'),
+                label: Text(AppStrings.tr('enter_invite_code_button')),
                 style: ElevatedButton.styleFrom(
                   elevation: 0,
                   backgroundColor: primaryColor,
@@ -921,15 +921,18 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Enter Workspace',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                AppStrings.tr('enter_workspace_button'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              SizedBox(width: 8),
-              Icon(Icons.arrow_forward_rounded, size: 18),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_rounded, size: 18),
             ],
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/auth/auth_logic.dart';
 
@@ -206,7 +207,7 @@ class _AuthscreenState extends State<Authscreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Smart HR System',
+                                    AppStrings.tr('hr_system_tagline'),
                                     style: const TextStyle(
                                       color: Colors.white70,
                                       fontSize: 14,
@@ -214,7 +215,7 @@ class _AuthscreenState extends State<Authscreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Welcome Back',
+                                    AppStrings.tr('welcome_back_title'),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 32,
@@ -280,21 +281,7 @@ class _AuthscreenState extends State<Authscreen> {
             context: context,
             barrierDismissible: false,
             builder: (ctx) => Center(
-              child: Container(
-                padding: const EdgeInsets.all(30),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardTheme.color,
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const CircularProgressIndicator(),
-              ),
+              child: const CircularProgressIndicator(),
             ).animate().scale(duration: 200.ms, curve: Curves.easeOutBack),
           );
 
@@ -341,7 +328,7 @@ class _AuthscreenState extends State<Authscreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Smart HR Management',
+          AppStrings.tr('hr_management_title'),
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -350,7 +337,7 @@ class _AuthscreenState extends State<Authscreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Sign in to manage your attendance, leave, and notifications in one place.',
+          AppStrings.tr('auth_subtitle'),
           style: TextStyle(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             fontSize: 13,
@@ -361,22 +348,22 @@ class _AuthscreenState extends State<Authscreen> {
         _buildFeatureRow(
           theme,
           icon: Icons.face_retouching_natural_rounded,
-          title: 'Face Attendance',
-          subtitle: 'Check in and out with a quick face scan',
+          title: AppStrings.tr('feature_face_attendance_title'),
+          subtitle: AppStrings.tr('feature_face_attendance_desc'),
         ),
         const SizedBox(height: 16),
         _buildFeatureRow(
           theme,
           icon: Icons.event_available_rounded,
-          title: 'Leave Management',
-          subtitle: 'Apply for leave and track approval status',
+          title: AppStrings.tr('feature_leave_management_title'),
+          subtitle: AppStrings.tr('feature_leave_management_desc'),
         ),
         const SizedBox(height: 16),
         _buildFeatureRow(
           theme,
           icon: Icons.notifications_active_rounded,
-          title: 'Instant Notifications',
-          subtitle: 'Stay updated on approvals and announcements',
+          title: AppStrings.tr('feature_notifications_title'),
+          subtitle: AppStrings.tr('feature_notifications_desc'),
         ),
         const SizedBox(height: 32),
         Row(
@@ -389,7 +376,7 @@ class _AuthscreenState extends State<Authscreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'Sign in to continue',
+                AppStrings.tr('sign_in_to_continue'),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -442,7 +429,7 @@ class _AuthscreenState extends State<Authscreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          'Signing in...',
+                          AppStrings.tr('signing_in'),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -458,7 +445,7 @@ class _AuthscreenState extends State<Authscreen> {
                         Image.asset(AppImg.googleLogo, width: 22, height: 22),
                         const SizedBox(width: 14),
                         Text(
-                          'Continue with Google',
+                          AppStrings.tr('continue_with_google'),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -478,17 +465,17 @@ class _AuthscreenState extends State<Authscreen> {
               color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             children: [
-              TextSpan(text: 'By continuing, you agree to our '),
+              TextSpan(text: AppStrings.tr('terms_agreement_prefix')),
               TextSpan(
-                text: 'Terms of Service',
+                text: AppStrings.tr('terms_of_service'),
                 style: TextStyle(
                   color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              TextSpan(text: ' and '),
+              TextSpan(text: AppStrings.tr('terms_agreement_and')),
               TextSpan(
-                text: 'Privacy Policy',
+                text: AppStrings.tr('privacy_policy'),
                 style: TextStyle(
                   color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,

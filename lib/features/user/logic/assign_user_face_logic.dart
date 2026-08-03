@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/constants/default_profile_urls.dart';
 import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
@@ -269,7 +270,10 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     if (userId.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.tr('unable_to_resolve_user_id'))),
+        SnackBar(
+          content: Text(AppStrings.tr('unable_to_resolve_user_id')),
+          backgroundColor: AppColors.error,
+        ),
       );
       return;
     }
@@ -343,7 +347,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('face_sample_upload_failed')}: $e'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     } finally {
@@ -419,7 +423,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
           content: Text(
             '${AppStrings.tr('face_sample_upload_failed')}: $cleanError',
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     }

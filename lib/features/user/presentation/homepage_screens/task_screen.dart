@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/task_detail_screen.dart';
 import 'package:flutter_worksmart_app/features/user/repository/task_repository.dart';
@@ -30,10 +31,10 @@ class _TaskScreenState extends State<TaskScreen> {
   bool _isRefreshing = false;
   bool _scrolledUp = false;
 
-  /// Whether a refresh (manual pull-to-refresh or silent background
-  /// refresh) is currently in flight. Drives the overscroll indicator in
-  /// `_buildPullToRefreshIndicator` (matches the homepage/leave-screen
-  /// gesture).
+  /// Whether a manual pull-to-refresh is currently in flight. Swaps the
+  /// whole screen to the skeleton loader (see `build`), matching the
+  /// leave-management screen's pull-to-refresh behavior — unlike the silent
+  /// background refresh in `_initData`, which never touches this flag.
   bool get isRefreshing => _isRefreshing;
 
   SharedPreferences? _prefs;
@@ -130,18 +131,15 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// Fetches tasks from the network and updates the UI + cache only if
   /// the freshly-fetched list actually differs from what's in memory.
+  /// Only toggles `_isLoading` (cold-start skeleton) — `_isRefreshing` is
+  /// owned by `_loadTasks`, since this is also called for the silent
+  /// background refresh in `_initData`, which must stay invisible.
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
     final workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
 
-    if (mounted) {
-      setState(() {
-        if (showLoading) {
-          _isLoading = true;
-        } else {
-          _isRefreshing = true;
-        }
-      });
+    if (showLoading && mounted) {
+      setState(() => _isLoading = true);
     }
 
     try {
@@ -156,22 +154,15 @@ class _TaskScreenState extends State<TaskScreen> {
         setState(() {
           _tasks = tasks;
           _isLoading = false;
-          _isRefreshing = false;
         });
         await _saveToCache(newJson);
-      } else {
-        setState(() {
-          _isLoading = false;
-          _isRefreshing = false;
-        });
+      } else if (showLoading) {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('[TaskScreen] Failed to load tasks: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isRefreshing = false;
-        });
+      if (mounted && showLoading) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -188,10 +179,20 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   /// Manual pull-to-refresh (triggered by the overscroll gesture, see
-  /// `_onScroll`): an explicit user action, fetches from the network
-  /// directly and updates the cache on success.
+  /// `_onScroll`): swaps the whole screen to the skeleton loader (see
+  /// `build`, gated on `_isLoading || _isRefreshing`) instead of leaving
+  /// the small overscroll indicator over stale content, and always clears
+  /// `_isRefreshing` in `finally` — without that guarantee, an uncaught
+  /// error partway through would permanently disable further pulls
+  /// (`_onScroll` only fires while `!_isRefreshing`).
   Future<void> _loadTasks() async {
-    await _fetchFromNetwork(showLoading: false);
+    if (_isRefreshing || !mounted) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await _fetchFromNetwork(showLoading: false);
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   Future<void> _openTaskDetail(TaskModel task) async {
@@ -211,12 +212,12 @@ class _TaskScreenState extends State<TaskScreen> {
   String _statusLabel(String status) {
     switch (status) {
       case 'in_progress':
-        return 'In Progress';
+        return AppStrings.tr('request_status_in_progress');
       case 'completed':
-        return 'Completed';
+        return AppStrings.tr('request_status_completed');
       case 'pending':
       default:
-        return 'Pending';
+        return AppStrings.tr('request_status_pending');
     }
   }
 
@@ -279,12 +280,12 @@ class _TaskScreenState extends State<TaskScreen> {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back,
-            color: Theme.of(context).iconTheme.color,
+            color: Theme.of(context).colorScheme.primary,
           ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Tasks',
+          AppStrings.tr('task_menu'),
           style: TextStyle(
             color: Theme.of(context).colorScheme.primary,
             fontSize: 22,
@@ -293,7 +294,7 @@ class _TaskScreenState extends State<TaskScreen> {
         ),
         centerTitle: true,
       ),
-      body: _isLoading
+      body: _isLoading || _isRefreshing
           ? const TaskSkeletonLoading()
           : Stack(
               alignment: Alignment.topCenter,
@@ -309,7 +310,7 @@ class _TaskScreenState extends State<TaskScreen> {
                             height: MediaQuery.of(context).size.height * 0.6,
                             child: DataEmptyState(
                               imageAsset: AppImg.emptyState,
-                              message: 'No tasks yet',
+                              message: AppStrings.tr('no_tasks_yet'),
                             ),
                           ).animate().fadeIn(duration: 300.ms),
                         ],
@@ -351,7 +352,7 @@ class _TaskScreenState extends State<TaskScreen> {
             ? -_scrollController.position.pixels
             : 0.0;
 
-        if (overscroll <= 0 || _isRefreshing) {
+        if (overscroll <= 0 || _isLoading || _isRefreshing) {
           return const SizedBox.shrink();
         }
 

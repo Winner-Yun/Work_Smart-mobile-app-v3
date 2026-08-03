@@ -7,6 +7,7 @@ import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/config_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/config_service.dart';
@@ -89,7 +90,7 @@ class AuthLogic {
         return;
       }
 
-      await _fetchAndPrintFcmToken();
+      await _fetchAndRegisterFcmToken();
       onAutoLogin(username, userId, userType);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -159,8 +160,6 @@ class AuthLogic {
         'display_name': resolvedDisplayName,
       };
 
-      _showSuccessSnackBar(AppStrings.tr('logging_in_employee'));
-
       debugPrint(
         'Saving tokens to local database with User ID: $resolvedUserId',
       );
@@ -173,7 +172,9 @@ class AuthLogic {
       );
 
       await _fetchAndCacheAppConfig();
-      await _fetchAndPrintFcmToken();
+      await _fetchAndRegisterFcmToken();
+
+      _showSuccessSnackBar(AppStrings.tr('login_success'));
 
       debugPrint('--- LOGIN FLOW COMPLETED SUCCESSFULLY ---');
       return true;
@@ -214,9 +215,10 @@ class AuthLogic {
   }
 
   /// Fetches the device's FCM registration token once the user is confirmed
-  /// logged in (fresh Google sign-in or a valid cached session) and prints
-  /// it to the debug console for manual push-notification testing.
-  Future<void> _fetchAndPrintFcmToken() async {
+  /// logged in (fresh Google sign-in or a valid cached session) and
+  /// registers it with the backend so this device receives push
+  /// notifications. Best-effort: a failure here must not fail the login.
+  Future<void> _fetchAndRegisterFcmToken() async {
     try {
       final messaging = FirebaseMessaging.instance;
       await messaging.requestPermission();
@@ -224,8 +226,17 @@ class AuthLogic {
       debugPrint('===== FCM TOKEN =====');
       debugPrint(token);
       debugPrint('=====================');
+
+      if (token == null || token.isEmpty) return;
+
+      await _apiClient.patch(
+        ApiEndpoints.updateFcmToken,
+        data: {
+          'fcm_tokens': [token],
+        },
+      );
     } catch (e) {
-      debugPrint('[AuthLogic] Failed to get FCM token: $e');
+      debugPrint('[AuthLogic] Failed to register FCM token: $e');
     }
   }
 
@@ -345,7 +356,7 @@ class AuthLogic {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
         duration: const Duration(seconds: 2),
       ),
     );

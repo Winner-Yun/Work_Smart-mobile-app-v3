@@ -10,6 +10,7 @@ import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/constants/map_styles.dart';
 import 'package:flutter_worksmart_app/core/util/database/attendance_data.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
@@ -87,7 +88,7 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
   String get workspaceDescription =>
       currentWorkspace?.description.isNotEmpty == true
       ? currentWorkspace!.description
-      : 'Active Workspace Zone';
+      : AppStrings.tr('no_details_provided');
 
   int get workspaceMemberCount => currentWorkspace?.memberCount ?? 1;
 

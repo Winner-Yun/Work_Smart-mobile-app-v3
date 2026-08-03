@@ -28,24 +28,30 @@ const Map<String, String> homeMapStringsEn = {
   'far_from_office': 'Away',
   'mock_date': 'Mon, 24 Oct 2023',
   'face_required_title': 'Please Verify Your Face',
-  'face_required_desc': 'Please press the button below to scan your face for attendance check-in',
+  'face_required_desc':
+      'Please press the button below to scan your face for attendance check-in',
   'register_now': 'Register Now',
   'register_again': 'Register Again',
   'pending_approval_title': 'Scan Under Review',
-  'pending_approval_desc': 'Your identity is being verified. Please wait for admin approval.',
+  'pending_approval_desc':
+      'Your identity is being verified. Please wait for admin approval.',
   'face_rejected_title': 'Face Verification Rejected',
-  'face_rejected_desc': 'Your previous face registration was rejected. Please register your face again.',
+  'face_rejected_desc':
+      'Your previous face registration was rejected. Please register your face again.',
   'processing': 'Processing...',
   'points_label': 'Pts',
   'punctuality': 'Punctuality',
   'wait': 'Please wait...',
   'check_out_requires_check_in': 'Check In Required',
-  'check_out_requires_check_in_desc': 'You need to scan your Check In before you can proceed with a Check Out.',
+  'check_out_requires_check_in_desc':
+      'You need to scan your Check In before you can proceed with a Check Out.',
   'understood': 'Understood',
-  'face_scan_success_desc': 'You have been successfully registered for attendance.',
+  'face_scan_success_desc':
+      'You have been successfully registered for attendance.',
   'face_scan_success': 'Attendance Registered Successfully!',
   'profile_photo_option_title': 'Profile Photo Option',
-  'profile_photo_option_desc': 'Would you like to crop this face image and use it as your profile photo?',
+  'profile_photo_option_desc':
+      'Would you like to crop this face image and use it as your profile photo?',
   'crop_and_use_profile': 'Use',
   'profile_photo_updated': 'Profile photo updated successfully.',
   'profile_photo_update_failed': 'Failed to update profile image',
@@ -54,9 +60,15 @@ const Map<String, String> homeMapStringsEn = {
   'time_placeholder': '--:--',
   'not_user': 'Not a registered user',
   'location_permission_required_title': 'Location Permission Required',
-  'location_permission_required_message': 'Location access is needed to verify attendance range and update your office map status.',
+  'location_permission_required_message':
+      'Location access is needed to verify attendance range and update your office map status.',
   'notification_permission_required_title': 'Notification Permission Required',
-  'notification_permission_required_message': 'Notifications keep you informed about attendance and leave status updates in real time.',
+  'notification_permission_required_message':
+      'Notifications keep you informed about attendance and leave status updates in real time.',
+  'main_office': 'Main Office',
+  'members': 'Members',
+  'zone': 'Scan Radius',
+  'switch': 'Switch',
 };
 
 const Map<String, String> homeMapStringsKm = {
@@ -88,33 +100,46 @@ const Map<String, String> homeMapStringsKm = {
   'far_from_office': 'នៅឆ្ងាយ',
   'mock_date': 'ថ្ងៃចន្ទ, ២៤ តុលា ២០២៣',
   'face_required_title': 'សូមធ្វើការចុះអត្តសញ្ញាណមុខ',
-  'face_required_desc': 'សូមចុចប៊ូតុងខាងក្រោម ដើម្បីធ្វើការស្កេនមុខ សម្រាប់ការចុះវត្តមាន',
+  'face_required_desc':
+      'សូមចុចប៊ូតុងខាងក្រោម ដើម្បីធ្វើការស្កេនមុខ សម្រាប់ការចុះវត្តមាន',
   'register_now': 'ចុះឈ្មោះឥឡូវនេះ',
   'register_again': 'ចុះឈ្មោះម្តងទៀត',
   'pending_approval_title': 'កំពុងត្រួតពិនិត្យ',
-  'pending_approval_desc': 'អត្តសញ្ញាណរបស់អ្នកកំពុងត្រូវបានផ្ទៀងផ្ទាត់។ សូមរង់ចាំការអនុម័ត។',
+  'pending_approval_desc':
+      'អត្តសញ្ញាណរបស់អ្នកកំពុងត្រូវបានផ្ទៀងផ្ទាត់។ សូមរង់ចាំការអនុម័ត។',
   'face_rejected_title': 'ការផ្ទៀងផ្ទាត់មុខត្រូវបានបដិសេធ',
-  'face_rejected_desc': 'ការចុះអត្តសញ្ញាណមុខមុនរបស់អ្នកត្រូវបានបដិសេធ។ សូមចុះឈ្មោះមុខម្តងទៀត។',
+  'face_rejected_desc':
+      'ការចុះអត្តសញ្ញាណមុខមុនរបស់អ្នកត្រូវបានបដិសេធ។ សូមចុះឈ្មោះមុខម្តងទៀត។',
   'processing': 'កំពុងដំណើរការ...',
   'points_label': 'ពិន្ទុ',
   'punctuality': 'ភាពទាន់ពេល',
   'wait': 'សូមរង់ចាំ...',
   'check_out_requires_check_in': 'ត្រូវធ្វើការចុះវត្ត.ចូលជាមុន',
-  'check_out_requires_check_in_desc': 'អ្នកត្រូវស្កេនចុះ វត្ត.ចូល ជាមុនទើបអាចបន្តចុះ​ វត្ត.ចេញ បាន។',
+  'check_out_requires_check_in_desc':
+      'អ្នកត្រូវស្កេនចុះ វត្ត.ចូល ជាមុនទើបអាចបន្តចុះ​ វត្ត.ចេញ បាន។',
   'understood': 'យល់ព្រម',
   'face_scan_success_desc': 'អ្នកត្រូវបានចុះវត្តមានដោយជោគជ័យ។!',
   'face_scan_success': 'បានចុះវត្តមានជោគជ័យ!',
   'profile_photo_option_title': 'ជម្រើសរូបភាពប្រវត្តិរូប',
-  'profile_photo_option_desc': 'តើអ្នកចង់កាត់រូបមុខនេះ ហើយប្រើជារូបភាពប្រវត្តិរូបរបស់អ្នកទេ?',
+  'profile_photo_option_desc':
+      'តើអ្នកចង់កាត់រូបមុខនេះ ហើយប្រើជារូបភាពប្រវត្តិរូបរបស់អ្នកទេ?',
   'crop_and_use_profile': 'ប្រើប្រាស់',
   'profile_photo_updated': 'បានធ្វើបច្ចុប្បន្នភាពរូបភាពប្រវត្តិរូបដោយជោគជ័យ។',
-  'profile_photo_update_failed': 'មិនអាចធ្វើបច្ចុប្បន្នភាពរូបភាពប្រវត្តិរូបបានទេ',
+  'profile_photo_update_failed':
+      'មិនអាចធ្វើបច្ចុប្បន្នភាពរូបភាពប្រវត្តិរូបបានទេ',
   'navigation_failed': 'ការនាំផ្លូវបានបរាជ័យ',
   'at': 'នៅ',
   'time_placeholder': '--:--',
   'not_user': 'មិនមែនជាអ្នកទេ',
   'location_permission_required_title': 'ត្រូវការសិទ្ធិចូលប្រើទីតាំង',
-  'location_permission_required_message': 'ត្រូវការទីតាំងដើម្បីផ្ទៀងផ្ទាត់ចម្ងាយវត្តមាន និងធ្វើបច្ចុប្បន្នភាពស្ថានភាពផែនទីការិយាល័យ។',
+  'location_permission_required_message':
+      'ត្រូវការទីតាំងដើម្បីផ្ទៀងផ្ទាត់ចម្ងាយវត្តមាន និងធ្វើបច្ចុប្បន្នភាពស្ថានភាពផែនទីការិយាល័យ។',
   'notification_permission_required_title': 'ត្រូវការសិទ្ធិជូនដំណឹង',
-  'notification_permission_required_message': 'ការជូនដំណឹងជួយអោយអ្នកដឹងអំពីវត្តមាន និងស្ថានភាពច្បាប់ឈប់សម្រាកជាបន្តបន្ទាប់។',
+  'notification_permission_required_message':
+      'ការជូនដំណឹងជួយអោយអ្នកដឹងអំពីវត្តមាន និងស្ថានភាពច្បាប់ឈប់សម្រាកជាបន្តបន្ទាប់។',
+
+  'main_office': 'ការិយាល័យសំខាន់',
+  'members': 'សមាជិក',
+  'zone': 'Scan Radius',
+  'switch': 'ប្តូរ',
 };

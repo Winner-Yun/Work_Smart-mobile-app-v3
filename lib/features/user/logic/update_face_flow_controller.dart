@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/auth/auth_logic.dart';
 import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
@@ -248,7 +249,7 @@ class UpdateFaceFlowController {
     ).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }

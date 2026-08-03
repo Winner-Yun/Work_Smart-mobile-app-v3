@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_worksmart_app/config/env.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_attendance_screen.dart';
@@ -182,6 +183,7 @@ class _MainScreenState extends State<MainScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(AppStrings.tr('select_workspace_first')),
+                  backgroundColor: AppColors.error,
                 ),
               );
               return;

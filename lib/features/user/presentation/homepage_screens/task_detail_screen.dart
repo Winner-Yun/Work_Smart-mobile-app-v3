@@ -44,7 +44,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
           content: Text(
             '${AppStrings.tr('task_status_update_failed')}: ${e.toString().replaceFirst('Exception: ', '')}',
             style: const TextStyle(color: AppColors.textLight),
@@ -83,7 +83,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Update status',
+                      AppStrings.tr('update_status_title'),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 17,
@@ -154,12 +154,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   String _statusLabel(String status) {
     switch (status) {
       case 'in_progress':
-        return 'In Progress';
+        return AppStrings.tr('request_status_in_progress');
       case 'completed':
-        return 'Completed';
+        return AppStrings.tr('request_status_completed');
       case 'pending':
       default:
-        return 'Pending';
+        return AppStrings.tr('request_status_pending');
     }
   }
 
@@ -232,13 +232,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           leading: IconButton(
             icon: Icon(
               Icons.arrow_back_ios,
-              color: Theme.of(context).iconTheme.color,
+              color: Theme.of(context).colorScheme.primary,
               size: 20,
             ),
             onPressed: () => Navigator.pop(context, _changed ? _task : null),
           ),
           title: Text(
-            'Task Details',
+            AppStrings.tr('task_details_title'),
             style: TextStyle(
               color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold,
@@ -375,7 +375,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         Expanded(
           child: _buildDetailBox(
             _priorityIcon(_task.priority),
-            'Priority',
+            AppStrings.tr('priority_label'),
             _task.priority,
             priorityColor,
           ),
@@ -384,7 +384,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         Expanded(
           child: _buildDetailBox(
             Icons.event_outlined,
-            'Deadline',
+            AppStrings.tr('deadline_label'),
             (_task.deadline ?? '').trim().isEmpty ? '—' : _task.deadline!,
             Theme.of(context).colorScheme.primary,
           ),
@@ -457,7 +457,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             ),
             const SizedBox(width: 10),
             Text(
-              'Description',
+              AppStrings.tr('description_label'),
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color,
                 fontWeight: FontWeight.w700,
@@ -479,7 +479,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             ),
           ),
           child: Text(
-            description.isEmpty ? 'No description provided.' : description,
+            description.isEmpty
+                ? AppStrings.tr('no_description_provided')
+                : description,
             style: TextStyle(
               color: description.isEmpty
                   ? AppColors.textGrey
@@ -506,7 +508,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             ),
             const SizedBox(width: 10),
             Text(
-              'Assigned to',
+              AppStrings.tr('assigned_to_label'),
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color,
                 fontWeight: FontWeight.w700,
@@ -566,9 +568,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           color: AppColors.textLight,
           size: 18,
         ),
-        label: const Text(
-          'Update Status',
-          style: TextStyle(
+        label: Text(
+          AppStrings.tr('update_status_button'),
+          style: const TextStyle(
             color: AppColors.textLight,
             fontWeight: FontWeight.bold,
             fontSize: 15,

@@ -20,6 +20,11 @@ class UserRepository {
     return UserModel.fromJson(data);
   }
 
+  Future<UserModel> updateAllowNotification(bool allow) async {
+    final data = await _userService.updateAllowNotification(allow);
+    return UserModel.fromJson(data);
+  }
+
   Future<void> logout(String refreshToken) {
     return _userService.logout(refreshToken);
   }

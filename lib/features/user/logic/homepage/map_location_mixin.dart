@@ -236,7 +236,7 @@ mixin _MapLocationMixin on _HomePageLogicState {
                 ),
               ],
             ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: AppColors.error,
             duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
           ),

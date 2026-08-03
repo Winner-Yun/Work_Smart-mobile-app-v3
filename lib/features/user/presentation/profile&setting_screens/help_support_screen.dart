@@ -243,7 +243,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             Expanded(
               child: Text(
                 AppStrings.tr('language_label'),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
               ),
             ),
             Container(
@@ -287,7 +290,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             fontSize: 12,
             fontWeight: active ? FontWeight.bold : FontWeight.w500,
             color: active
-                ? (isDark ? Colors.white : Theme.of(context).colorScheme.primary)
+                ? (isDark
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.primary)
                 : Colors.grey,
           ),
         ),

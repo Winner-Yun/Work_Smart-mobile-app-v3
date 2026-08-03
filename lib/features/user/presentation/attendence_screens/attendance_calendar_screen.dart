@@ -168,6 +168,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
             content: Text(
               '${AppStrings.tr('attendance_proof_failed')}: $error',
             ),
+            backgroundColor: AppColors.error,
           ),
         );
       } else {
@@ -397,13 +398,17 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.tr('attendance_proof_ready'))),
+        SnackBar(
+          content: Text(AppStrings.tr('attendance_proof_ready')),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('attendance_proof_failed')}: $error'),
+          backgroundColor: AppColors.error,
         ),
       );
     } finally {

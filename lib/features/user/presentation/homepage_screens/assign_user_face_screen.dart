@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
 import 'package:flutter_worksmart_app/features/user/logic/assign_user_face_logic.dart';
 
@@ -199,7 +200,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
               content: Text(
                 '${AppStrings.tr('profile_photo_update_failed')}: $e',
               ),
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: AppColors.error,
             ),
           );
         } finally {
@@ -226,7 +227,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('navigation_failed')}: $error'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     }

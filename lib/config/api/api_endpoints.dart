@@ -7,6 +7,11 @@ class ApiEndpoints {
   static const String me = '/auth/me';
   static const String logout = '/auth/logout';
   static const String updateProfileImage = '/auth/me/profile-image';
+  static const String updateFcmToken = '/auth/me/fcm-token';
+
+  // NOTIFICATION
+  static const String allowNotification =
+      '/notification/me/allow-notification';
 
   // workspace
   static const String myWorkspaces = '/workspace/me';

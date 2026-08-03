@@ -5,6 +5,7 @@ class UserModel {
   final String avatar;
   final String gender;
   final String status;
+  final bool allowNotification;
 
   UserModel({
     required this.id,
@@ -13,6 +14,7 @@ class UserModel {
     required this.avatar,
     required this.gender,
     required this.status,
+    this.allowNotification = true,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class UserModel {
       avatar: json['avatar']?.toString() ?? '',
       gender: json['gender']?.toString() ?? 'unknown',
       status: json['status']?.toString() ?? 'unknown',
+      allowNotification: json['allow_notification'] as bool? ?? true,
     );
   }
 
@@ -33,5 +36,6 @@ class UserModel {
         'avatar': avatar,
         'gender': gender,
         'status': status,
+        'allow_notification': allowNotification,
       };
 }

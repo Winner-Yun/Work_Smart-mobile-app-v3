@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
 import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
@@ -320,7 +321,10 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
     if (userId.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.tr('unable_to_resolve_user_id'))),
+        SnackBar(
+          content: Text(AppStrings.tr('unable_to_resolve_user_id')),
+          backgroundColor: AppColors.error,
+        ),
       );
       setState(() {
         isScanning = false;
@@ -406,7 +410,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppStrings.tr('face_verification_timeout')),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -433,7 +437,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
           content: Text(
             '${AppStrings.tr('face_verification_failed_prefix')}: $e',
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -466,7 +470,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(verification.message),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -719,7 +723,10 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
     if (userId.isEmpty) {
       if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.tr('unable_to_resolve_user_id'))),
+        SnackBar(
+          content: Text(AppStrings.tr('unable_to_resolve_user_id')),
+          backgroundColor: AppColors.error,
+        ),
       );
       return null;
     }
@@ -734,7 +741,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
           content: Text(
             '${AppStrings.tr('attendance_scan_save_failed')}: ${AppStrings.tr('unable_to_resolve_workspace')}',
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return null;
@@ -792,7 +799,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${AppStrings.tr('attendance_scan_save_failed')}: $e'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return null;

@@ -22,6 +22,7 @@ import 'strings/manage_users_strings.dart';
 import 'strings/admin_dashboard_strings.dart';
 import 'strings/geofencing_strings.dart';
 import 'strings/invite_strings.dart';
+import 'strings/workspace_strings.dart';
 
 class AppStrings {
   static String get currentLang => LanguageManager().locale;
@@ -51,6 +52,7 @@ class AppStrings {
       ...adminDashboardStringsEn,
       ...geofencingStringsEn,
       ...inviteStringsEn,
+      ...workspaceStringsEn,
     },
     'km': {
       ...menuStringsKm,
@@ -76,6 +78,7 @@ class AppStrings {
       ...adminDashboardStringsKm,
       ...geofencingStringsKm,
       ...inviteStringsKm,
+      ...workspaceStringsKm,
     },
   };
 

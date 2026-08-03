@@ -70,7 +70,8 @@ mixin _DataLoadingMixin
       officeName = currentGeofence!.name;
     } else {
       officeName =
-          _officeConfigData['office_name']?.toString() ?? 'Main Office';
+          _officeConfigData['office_name']?.toString() ??
+          AppStrings.tr('main_office');
     }
 
     final Map<String, dynamic> policy = _asStringKeyMap(

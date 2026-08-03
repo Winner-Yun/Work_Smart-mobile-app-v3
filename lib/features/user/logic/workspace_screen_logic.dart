@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/workspace_screen.dart';
 import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
@@ -242,7 +243,7 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
           isLoading = false;
           isRefreshing = false;
           if (workspaces.isEmpty && currentUser == null) {
-            errorMessage = 'Failed to load data. Please try again.';
+            errorMessage = AppStrings.tr('load_data_failed_retry');
           }
         });
       }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/shared/model/request_model.dart';
 import 'package:intl/intl.dart';
@@ -18,6 +19,7 @@ class RequestDetailScreen extends StatelessWidget {
       case 'seen':
         return AppColors.info;
       case 'pending':
+        return AppColors.warning;
       default:
         return AppColors.textGrey;
     }
@@ -40,14 +42,14 @@ class RequestDetailScreen extends StatelessWidget {
   String _statusLabel(String status) {
     switch (status.toLowerCase()) {
       case 'in_progress':
-        return 'In Progress';
+        return AppStrings.tr('request_status_in_progress');
       case 'completed':
-        return 'Completed';
+        return AppStrings.tr('request_status_completed');
       case 'seen':
-        return 'Seen';
+        return AppStrings.tr('request_status_seen');
       case 'pending':
       default:
-        return 'Pending';
+        return AppStrings.tr('request_status_pending');
     }
   }
 
@@ -55,7 +57,7 @@ class RequestDetailScreen extends StatelessWidget {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Close image',
+      barrierLabel: AppStrings.tr('close_image_label'),
       barrierColor: Colors.black.withValues(alpha: 0.8),
       transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (context, anim1, anim2) => const SizedBox(),
@@ -150,13 +152,13 @@ class RequestDetailScreen extends StatelessWidget {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios,
-            color: Theme.of(context).iconTheme.color,
+            color: Theme.of(context).colorScheme.primary,
             size: 20,
           ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Request Details',
+          AppStrings.tr('request_details_title'),
           style: TextStyle(
             color: Theme.of(context).colorScheme.primary,
             fontWeight: FontWeight.bold,
@@ -197,7 +199,10 @@ class RequestDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Submitted ${dateFormatter.format(request.createdAt)}',
+                  AppStrings.tr('submitted_on').replaceFirst(
+                    '{date}',
+                    dateFormatter.format(request.createdAt),
+                  ),
                   style: TextStyle(color: AppColors.textGrey, fontSize: 12),
                 ),
               ],
@@ -302,7 +307,7 @@ class RequestDetailScreen extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              'Description',
+              AppStrings.tr('description_label'),
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color,
                 fontWeight: FontWeight.w700,
@@ -349,7 +354,7 @@ class RequestDetailScreen extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              'Attachments',
+              AppStrings.tr('attachments'),
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color,
                 fontWeight: FontWeight.w700,
@@ -408,7 +413,7 @@ class RequestDetailScreen extends StatelessWidget {
             Icon(Icons.forum_outlined, color: statusColor, size: 20),
             const SizedBox(width: 10),
             Text(
-              'Response',
+              AppStrings.tr('response_label'),
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color,
                 fontWeight: FontWeight.w700,

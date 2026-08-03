@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/repository/invite_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/invite_service.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/invites_screen.dart';
@@ -193,7 +194,7 @@ abstract class InvitesLogic extends State<InvitesScreen> {
           content: Text(
             '${AppStrings.tr('invites_load_failed')}: ${e.toString().replaceAll('Exception: ', '')}',
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     }
@@ -246,7 +247,7 @@ abstract class InvitesLogic extends State<InvitesScreen> {
           content: Text(
             '${AppStrings.tr('invite_action_failed')}: ${e.toString().replaceAll('Exception: ', '')}',
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     } finally {
@@ -277,7 +278,7 @@ abstract class InvitesLogic extends State<InvitesScreen> {
           content: Text(
             '${AppStrings.tr('invite_action_failed')}: ${e.toString().replaceAll('Exception: ', '')}',
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
     } finally {

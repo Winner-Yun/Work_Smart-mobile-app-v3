@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
+import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
@@ -70,7 +71,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('annual_leave_no_remaining_days'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -85,7 +86,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -98,7 +99,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('leave_date_already_requested'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -111,7 +112,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('leave_range_already_requested'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -124,7 +125,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('annual_leave_end_date_must_be_after_start'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -137,7 +138,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           AppStrings.tr('leave_no_available_dates'),
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: AppColors.error,
       ),
     );
   }
@@ -452,7 +453,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             AppStrings.tr('unable_to_resolve_user_id'),
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -505,7 +506,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             '${AppStrings.tr('leave_request_submit_failed')}: ${_describeError(submitError)}',
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: AppColors.error,
         ),
       );
       return;

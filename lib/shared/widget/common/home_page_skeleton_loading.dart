@@ -98,6 +98,14 @@ class _HomePageSkeletonLoadingState extends State<HomePageSkeletonLoading>
                         opacity: pulse,
                       ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 20),
+                      child: _SkeletonCircle(
+                        size: 36,
+                        color: animatedColor,
+                        opacity: pulse,
+                      ),
+                    ),
                   ],
                 ),
                 SliverToBoxAdapter(
