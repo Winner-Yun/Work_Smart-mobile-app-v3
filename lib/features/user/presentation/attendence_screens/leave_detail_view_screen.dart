@@ -543,7 +543,6 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
                         );
                       },
                     ),
-                    // Overlay with gradient
                     Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -556,7 +555,6 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
                         ),
                       ),
                     ),
-                    // Bottom info
                     Positioned(
                       bottom: 12,
                       left: 12,

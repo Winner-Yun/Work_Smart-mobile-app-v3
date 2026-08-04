@@ -32,8 +32,7 @@ class LeaveAttendanceScreen extends StatefulWidget {
 }
 
 class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
-  // Fallback totals used until the workspace policy (cached locally, or
-  // freshly fetched on pull-to-refresh) provides the real limits.
+  // Fallback totals until the workspace policy provides the real limits.
   static const int _defaultAnnualTotal = 18;
   static const int _defaultSickTotal = 5;
 
@@ -87,12 +86,8 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     }
   }
 
-  /// Cache-first: render whatever's cached locally (policy + leave list)
-  /// immediately — no blocking skeleton — then silently refresh both from
-  /// the server in the background and update in place only if something
-  /// actually changed. A true cold start (neither cached) is the only case
-  /// that still waits on the network, since there's nothing meaningful to
-  /// show otherwise.
+  // Cache-first; a true cold start still waits on the network since
+  // there's nothing meaningful to show otherwise.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -115,8 +110,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
 
     if (hasLocalData) {
       _applyPolicyLimits(cachedPolicyMap);
-      // Keep the skeleton up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Brief artificial delay so the cache read doesn't pop in instantly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (mounted) {
         setState(() {
@@ -132,9 +126,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     }
   }
 
-  /// Silently re-fetches policy + leave list from the server after the
-  /// cache-first render above, and updates the UI in place only if the
-  /// fetched data actually differs from what's already shown.
   Future<void> _refreshFromServerInBackground() async {
     final String? workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -161,17 +152,13 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       final prefs = await SharedPreferences.getInstance();
       await _saveCachedLeaves(prefs, workspaceId, fetchedLeaves);
     } catch (e) {
-      // Best-effort background refresh; the cache-first data already on
-      // screen stays put on failure.
+      // Best-effort; the cache-first data already on screen stays put.
       debugPrint(
         '[LeaveAttendanceScreen] Background leave refresh failed: $e',
       );
     }
   }
 
-  /// Reads the cached leave list (SharedPreferences JSON array of
-  /// `LeaveModel.toJson()`) for [workspaceId]. Returns null if nothing is
-  /// cached or it fails to decode.
   Future<List<LeaveModel>?> _readCachedLeaves(
     SharedPreferences prefs,
     String workspaceId,
@@ -213,8 +200,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       return;
     }
 
-    // Leave totals come from the workspace policy, cached locally — read it
-    // here instead of hardcoding limits.
     final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
       _workspaceId!,
     );
@@ -230,17 +215,12 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       });
       await _saveCachedLeaves(prefs, _workspaceId!, leaves);
     } catch (e) {
-      // The list endpoint is known to be unreliable right now, so fail
-      // open with an empty list rather than crashing the screen.
+      // The list endpoint is unreliable; fail open with an empty list.
       debugPrint('[LeaveAttendanceScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Recomputes used/remaining totals and the sorted history from
-  /// `_leaveRecords` + the current policy totals. Shared by the cache-load
-  /// path, the network-fetch path, and the background refresh path so the
-  /// computation only lives in one place.
   void _applyLeaveComputations() {
     _annualUsed = _sumUsedDays(
       (type) => type.contains('annual') || type.contains('casual'),
@@ -266,9 +246,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     return (parsed != null && parsed > 0) ? parsed : null;
   }
 
-  /// Fetches the policy fresh from the server, updates the local cache
-  /// (skipping the write if nothing changed), and refreshes the on-screen
-  /// totals. Best-effort: falls back to whatever is cached on failure.
   Future<void> _fetchPolicyFromServer() async {
     final String? workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -312,11 +289,8 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     }
   }
 
-  /// Pull-to-refresh (triggered by overscrolling past the top, matching the
-  /// homepage gesture): re-fetches the policy fresh and reloads the leave
-  /// list. Guarded by `_isRefreshing`/`_scrolledUp` (see `_onScroll`) so a
-  /// single pull gesture only triggers one round of calls instead of firing
-  /// again on every scroll event while overscrolled.
+  // Guarded by _isRefreshing so continuous overscroll doesn't refire this
+  // on every scroll event (see _onScroll).
   Future<void> _handleRefresh() async {
     if (_isRefreshing) return;
     if (mounted) setState(() => _isRefreshing = true);
@@ -403,7 +377,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
   }
 
   Future<void> _openLeaveRequest(String routeName) async {
-    // Check if requesting sick leave
     if (routeName == AppRoute.sickleaveScreen) {
       final activeSickRequests = _leaveRecords
           .where(
@@ -479,7 +452,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // FIXED TOP SECTION
                 Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -498,7 +470,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
                     .fadeIn(duration: 260.ms)
                     .slideY(begin: -0.04, end: 0),
 
-                // SCROLLABLE LIST SECTION
                 Expanded(
                   child: Stack(
                     alignment: Alignment.topCenter,
@@ -574,10 +545,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     );
   }
 
-  // --- Pull-to-refresh indicator: matches the homepage's overscroll-driven
-  // rotating arrow → refresh icon. Once the pull is released, `_isRefreshing`
-  // swaps the whole list area to the skeleton loader (see the Expanded above)
-  // so this indicator never needs its own "loading" state or text.
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,
@@ -635,7 +602,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     );
   }
 
-  // --- 1. AppBar Widget ---
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -654,7 +620,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     );
   }
 
-  // --- 2. Leave Summary Section ---
   Widget _buildSummarySection(BuildContext context) {
     return Row(
       children: [
@@ -681,7 +646,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     );
   }
 
-  // --- 3. Request List Header ---
   Widget _buildListHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -710,7 +674,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     );
   }
 
-  // --- 4. Fixed Bottom Action ---
   Widget _buildBottomAction(BuildContext context) {
     final activeSickRequests = _leaveRecords
         .where(
@@ -797,8 +760,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
         .slideY(begin: 0.1, end: 0);
   }
 
-  // --- Private Helper Components ---
-
   Widget _buildSummaryCard({
     required BuildContext context,
     required String title,
@@ -833,8 +794,8 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
           const SizedBox(height: 12),
           Text(
             title,
-            maxLines: 1, // Fix: Prevent wrapping
-            overflow: TextOverflow.ellipsis, // Fix: Handle overflow
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.grey, fontSize: 14),
           ),
           const SizedBox(height: 4),

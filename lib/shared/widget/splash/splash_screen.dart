@@ -73,7 +73,6 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkDeveloperModeAndProceed() async {
-    // Wait for splash duration
     await Future<void>.delayed(widget.minDuration);
     if (!mounted) return;
     if (_devModeChecked) return;
@@ -85,7 +84,6 @@ class _SplashScreenState extends State<SplashScreen>
       developerMode = false;
     }
     if (developerMode) {
-      // Show blocking alert and exit if not closed
       await showDialog<void>(
         context: context,
         barrierDismissible: false,

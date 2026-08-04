@@ -68,7 +68,6 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
         .trim();
   }
 
-  /// REST profile, falling back to the local cache if the network call fails.
   Future<UserModel> _resolveCurrentUser() async {
     try {
       return await UserRepository(UserService()).getUserProfile();
@@ -78,10 +77,8 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     }
   }
 
-  /// Local-first init: load whatever attendance is cached instantly, then
-  /// silently refresh from the network in the background. Only falls back
-  /// to a blocking fetch (with the loading indicator) on a true cold start
-  /// where nothing is cached yet.
+  // Local-first: shows cached data instantly and refreshes in the
+  // background; only blocks with a loader on a true cold start with no cache.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -91,8 +88,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     if (!mounted) return;
 
     if (_userAttendanceRecords.isNotEmpty) {
-      // Keep the loading state up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Keep the loading state up briefly so it doesn't pop in instantly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
       setState(() {
@@ -389,11 +385,9 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
       final fileName =
           'attendance_proof_${_currentUser.id}_${DateFormat('yyyy_MM').format(_currentViewDate)}.pdf';
 
-      // Save to temporary directory
       final tempDir = await getTemporaryDirectory();
       final file = await File('${tempDir.path}/$fileName').writeAsBytes(bytes);
 
-      // Share the file
       await Share.shareXFiles([XFile(file.path)], subject: 'Attendance Proof');
 
       if (!mounted) return;

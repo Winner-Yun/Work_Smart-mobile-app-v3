@@ -25,12 +25,10 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
   UserModel? currentUser;
   String? selectedWorkspaceId;
 
-  // --- Caching constants ---
   static const String _cacheKeyWorkspaces = 'cached_workspaces';
   static const String _cacheKeyUser = 'cached_workspace_user';
   static const String _cacheKeyTimestamp = 'cached_workspace_data_timestamp';
 
-  /// Cache is considered stale after this duration.
   static const Duration _cacheMaxAge = Duration(minutes: 10);
 
   SharedPreferences? _prefs;
@@ -43,7 +41,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
     _initData();
   }
 
-  /// Public getter so the UI can check whether a force-refresh is needed.
   bool get shouldForceRefresh => _isCacheExpired();
 
   bool get hasLocalUser => currentUser != null;
@@ -58,13 +55,11 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
     return DateTime.now().difference(cachedAt) > _cacheMaxAge;
   }
 
-  /// Local-first init: load from SharedPreferences + SQLite + loginData instantly,
-  /// then decide if network fetch is needed.
+  // Local-first: load cached data instantly, then decide if a network fetch is needed.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
 
-    // 1. Load everything we have locally first (instant UI)
     await _loadFromLocal();
 
     if (!mounted) return;
@@ -72,35 +67,25 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
     final bool hasAnyLocalData = hasLocalUser || hasLocalWorkspaces;
 
     if (hasAnyLocalData) {
-      // Keep the loader up briefly even though the cache read was instant,
-      // so loading doesn't read as a jarring instant pop-in.
+      // Keep loader up briefly so it doesn't read as a jarring instant pop-in.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
-      // Show local data immediately, no full-screen loader
       setState(() {
         isLoading = false;
         errorMessage = null;
       });
-      // Background refresh if stale
       if (_isCacheExpired()) {
         _fetchFromNetwork(showLoading: false);
       }
     } else {
-      // No local data at all -> need network with loader
       await _fetchFromNetwork(showLoading: true);
     }
   }
 
-  /// Loads user profile from multiple local sources in priority order:
-  /// 1. SharedPreferences cached user
-  /// 2. SQLite user_profile_cache
-  /// 3. widget.loginData (passed from auth)
-  /// And workspaces from SharedPreferences.
   Future<void> _loadFromLocal() async {
     final prefs = _prefs;
     if (prefs == null) return;
 
-    // --- Workspaces from SharedPreferences ---
     final cachedWorkspacesJson = prefs.getString(_cacheKeyWorkspaces);
     if (cachedWorkspacesJson != null) {
       try {
@@ -118,7 +103,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
       }
     }
 
-    // --- User from SharedPreferences ---
     final cachedUserJson = prefs.getString(_cacheKeyUser);
     if (cachedUserJson != null) {
       try {
@@ -131,7 +115,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
       }
     }
 
-    // --- User from SQLite (fallback) ---
     if (currentUser == null) {
       try {
         final dbProfile = await DatabaseHelper().getUserProfile();
@@ -140,7 +123,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
           debugPrint(
             '✅ [WorkspaceScreenLogic] Loaded user from SQLite: ${currentUser?.name}',
           );
-          // Sync back to SharedPreferences for faster next load
           await prefs.setString(
             _cacheKeyUser,
             jsonEncode(currentUser!.toJson()),
@@ -153,7 +135,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
       }
     }
 
-    // --- User from loginData (last fallback, also local) ---
     if (currentUser == null) {
       final localFromLogin = _tryParseUserFromLoginData();
       if (localFromLogin != null) {
@@ -161,7 +142,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
         debugPrint(
           '✅ [WorkspaceScreenLogic] Loaded user from loginData: ${currentUser?.name}',
         );
-        // Persist this to both caches so next launch is instant
         try {
           await prefs.setString(
             _cacheKeyUser,
@@ -173,19 +153,16 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
     }
   }
 
-  /// Tries to build a UserModel from widget.loginData if available.
   UserModel? _tryParseUserFromLoginData() {
     final data = widget.loginData;
     if (data == null || data.isEmpty) return null;
     try {
-      // loginData may already be a UserModel-like map or contain nested user
       final Map<String, dynamic> candidate;
       if (data.containsKey('user') && data['user'] is Map) {
         candidate = Map<String, dynamic>.from(data['user'] as Map);
       } else {
         candidate = Map<String, dynamic>.from(data);
       }
-      // Only build if we have at least a name or email or id
       if (candidate['name'] == null &&
           candidate['email'] == null &&
           candidate['_id'] == null &&
@@ -201,8 +178,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
     }
   }
 
-  /// Fetches workspaces and user profile from the network,
-  /// then caches the results locally.
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
     if (showLoading) {
       if (mounted) {

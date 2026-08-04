@@ -71,7 +71,6 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
   }
 
   void _onScroll() {
-    // Triggers refresh when over-scrolling past -100 pixels (pulling down)
     if (_scrollController.position.pixels < -100 && !_scrolledUp) {
       _scrolledUp = true;
       onRefresh();
@@ -162,22 +161,19 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                         .fadeIn(duration: 280.ms)
                         .slideY(begin: -0.08, end: 0, curve: Curves.easeOut),
                     const SizedBox(height: 16),
-                    _buildSearchBar(), // Always displayed
+                    _buildSearchBar(),
                     const SizedBox(height: 16),
                     Expanded(
                       child: Stack(
                         alignment: Alignment.topCenter,
-                        children: [
-                          _buildBody(),
-                          _buildPullToRefreshIndicator(), // Custom visual indicator
-                        ],
+                        children: [_buildBody(), _buildPullToRefreshIndicator()],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            _buildBottomBar(), // Always displayed
+            _buildBottomBar(),
           ],
         ),
       ),
@@ -443,29 +439,25 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     );
   }
 
-  // --- NEW: Custom Visual Indicator ---
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,
       builder: (context, child) {
         if (!_scrollController.hasClients) return const SizedBox.shrink();
 
-        // Get how far the user has pulled down past the top
         double overscroll = _scrollController.position.pixels < 0
             ? -_scrollController.position.pixels
             : 0.0;
 
-        // Hide it if we aren't pulling, or if it's already loading
         if (overscroll <= 0 || isLoading || isRefreshing) {
           return const SizedBox.shrink();
         }
 
-        // Calculate progress to the -100 threshold
         double progress = (overscroll / 100.0).clamp(0.0, 1.0);
-        bool isReadyToRelease = progress >= 0.95; // Almost at threshold
+        bool isReadyToRelease = progress >= 0.95;
 
         return Positioned(
-          top: 10 + (overscroll * 0.2), // Moves down slightly as user pulls
+          top: 10 + (overscroll * 0.2),
           child: Opacity(
             opacity: progress,
             child: Container(
@@ -486,7 +478,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                 ],
               ),
               child: Transform.rotate(
-                angle: progress * 6.28, // Rotates fully based on pull distance
+                angle: progress * 6.28,
                 child: Icon(
                   isReadyToRelease
                       ? Icons.refresh_rounded
@@ -504,12 +496,8 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     );
   }
 
-  // A single persistent Scrollable owns `_scrollController` at all times.
-  // Only its *content* switches between loading/error/empty/grid states —
-  // swapping the Scrollable widget type itself (e.g. GridView <->
-  // SingleChildScrollView) would transiently attach two ScrollPositions to
-  // the same controller in one frame and trip
-  // `ScrollController attached to multiple scroll views`.
+  // Keep a single Scrollable; only swap its content, or two ScrollPositions
+  // attach to _scrollController in one frame and it throws.
   Widget _buildBody() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -903,7 +891,6 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
         width: double.infinity,
         height: 50,
         child: ElevatedButton(
-          // Disabled while loading/refreshing or if no workspace is selected
           onPressed: hasSelection && !isLoading && !isRefreshing
               ? onConfirmSelection
               : null,

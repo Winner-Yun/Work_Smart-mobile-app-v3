@@ -57,9 +57,7 @@ class _HomePageScreenState extends HomePageLogic {
 
   @override
   Widget build(BuildContext context) {
-    // Manual refresh (onRefresh) shows the same skeleton as the initial
-    // load — isManualRefreshing is only ever set by that explicit user
-    // action, never by the silent cache-first background refresh.
+    // isManualRefreshing is only set by explicit pull-to-refresh, not the silent background refresh.
     if (isInitialDataLoading || isManualRefreshing) {
       return const Scaffold(body: SafeArea(child: HomePageSkeletonLoading()));
     }
@@ -136,9 +134,7 @@ class _HomePageScreenState extends HomePageLogic {
             ? -_scrollController.position.pixels
             : 0.0;
 
-        // While refreshing, the full skeleton (shown by onRefresh via
-        // isManualRefreshing) owns the loading feedback, so this
-        // drag-progress indicator just hides.
+        // The full skeleton owns loading feedback while refreshing, so this indicator hides.
         if (overscroll <= 0 || isInitialDataLoading || isRefreshing) {
           return const SizedBox.shrink();
         }
@@ -287,21 +283,17 @@ class _HomePageScreenState extends HomePageLogic {
           ),
           const SizedBox(height: 10),
 
-          // --- RESPONSIVE BOTTOM SECTION ---
           SizedBox(
             width: double.infinity,
             child: Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
-              spacing:
-                  8, // Horizontal space between the badge group and switch button
-              runSpacing:
-                  10, // Vertical space when the switch button wraps to a new line
+              spacing: 8,
+              runSpacing: 10,
               children: [
                 Wrap(
-                  spacing: 8, // Horizontal space between Member and Zone badges
-                  runSpacing:
-                      8, // Vertical space if the badges themselves need to wrap
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -313,8 +305,7 @@ class _HomePageScreenState extends HomePageLogic {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
-                        mainAxisSize:
-                            MainAxisSize.min, // Ensures tight fit inside Wrap
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.group_outlined,
@@ -343,8 +334,7 @@ class _HomePageScreenState extends HomePageLogic {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
-                        mainAxisSize:
-                            MainAxisSize.min, // Ensures tight fit inside Wrap
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.location_on_outlined,
@@ -375,8 +365,7 @@ class _HomePageScreenState extends HomePageLogic {
                         vertical: 4,
                       ),
                       child: Row(
-                        mainAxisSize:
-                            MainAxisSize.min, // Ensures tight fit inside Wrap
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             AppStrings.tr('switch'),

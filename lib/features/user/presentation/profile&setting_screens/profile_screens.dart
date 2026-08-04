@@ -30,8 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? loginData;
 
-  // Update Face needs an active workspace context to make sense — hide it
-  // while the user is still on the workspace picker (no workspace selected).
+  // Hidden while no workspace is selected — Update Face needs that context.
   final bool hasWorkspace;
 
   const ProfileScreen({super.key, this.loginData, this.hasWorkspace = true});
@@ -110,11 +109,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Cache-first: render whatever's cached locally immediately (no blocking
-  // skeleton), then silently refresh from the server in the background and
-  // update in place only if something actually changed. A true cold start
-  // (nothing cached yet) is the only case that still waits on the network,
-  // since there's nothing meaningful to show otherwise.
+  // Cache-first: show cached data immediately and refresh in the background;
+  // only a true cold start (nothing cached) waits on the network.
   Future<void> _loadData() async {
     final cached = await DatabaseHelper().getUserProfile();
     if (cached != null) {
@@ -125,8 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (hasLocalData) {
       unawaited(_loadWorkspaceName());
-      // Keep the skeleton up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Keep skeleton up briefly so it doesn't read as a jarring instant pop-in.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (mounted) {
         setState(() => _isLoading = false);
@@ -163,9 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final String? selectedId = prefs.getString('selected_workspace_id');
 
       if (selectedId == null || selectedId.isEmpty) {
-        // No workspace currently selected — never fall back to a
-        // previously cached workspace name, or it'll look like the user
-        // is still in a workspace they've since left/switched out of.
+        // Don't fall back to a cached name — the user may have left/switched workspaces.
         if (mounted) setState(() => _workspaceName = null);
         return;
       }
@@ -542,9 +535,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         '[ProfileScreen] Server logout failed, clearing locally anyway: $e',
       );
     } finally {
-      // Always wipe local data so the user can't get back into the app
-      // without logging in again, regardless of whether the server call
-      // succeeded.
+      // Wipe local data even if server logout failed, so the user must log in again.
       await DatabaseHelper().clearAllUserData();
     }
 

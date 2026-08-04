@@ -28,8 +28,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _cachedPasswordUsesDefault = false;
   bool _isHomeStartupFlowCompleted = false;
 
-  // Until a workspace is confirmed, only the Home (workspace picker) and
-  // Profile tabs make sense — the rest need a workspace context to function.
+  // Without a confirmed workspace, only the Home and Profile tabs are usable.
   bool _hasWorkspace = false;
   static const int _homeTabIndex = 0;
   static const int _profileTabIndex = 4;
@@ -115,14 +114,11 @@ class _MainScreenState extends State<MainScreen> {
     _isShowingPasswordChangeAlert = false;
   }
 
-  // ──────────────── EMPLOYEE APP NAVIGATION ────────────────
-  // Renders main tabs: Home, Attendance, Leave, Requests, Profile
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
-    // grey.shade300 reads as a muted/disabled icon on a light background,
-    // but on a dark background it's nearly as bright as the enabled icons —
-    // use a darker shade there so disabled tabs still look disabled.
+    // grey.shade300 barely reads as disabled on a dark background, so use a
+    // darker shade there.
     final Color disabledNavIconColor = isDark
         ? Colors.grey.shade700
         : Colors.grey.shade300;
@@ -144,8 +140,8 @@ class _MainScreenState extends State<MainScreen> {
           if (_hasWorkspace == hasWorkspace) return;
           setState(() {
             _hasWorkspace = hasWorkspace;
-            // If workspace access was revoked while on a tab that needs
-            // one, snap back to Home (the workspace picker) immediately.
+            // Snap back to Home if access was revoked while on a
+            // workspace-only tab.
             if (!_hasWorkspace &&
                 _currentIndex != _homeTabIndex &&
                 _currentIndex != _profileTabIndex) {

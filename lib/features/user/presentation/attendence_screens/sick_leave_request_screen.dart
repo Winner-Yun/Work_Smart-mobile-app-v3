@@ -27,8 +27,7 @@ class SickLeaveRequestScreen extends StatefulWidget {
 }
 
 class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
-  // Fallback total used until the workspace policy (cached locally, or
-  // freshly fetched from the server) provides the real limit.
+  // Fallback until the workspace policy provides the real limit.
   static const int _defaultSickLeaveTotal = 5;
   int _sickLeaveTotal = _defaultSickLeaveTotal;
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
@@ -79,13 +78,8 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     _loadInitialData();
   }
 
-  /// Cache-first, background-refresh init: any cached policy or cached
-  /// leave list is applied immediately (no blocking spinner), then a
-  /// background fetch refreshes both from the server and updates
-  /// state/cache only if something actually changed. A true cold start
-  /// (nothing cached at all) still blocks on the network, since a
-  /// leave-quota form genuinely can't validate submissions without
-  /// knowing the limits.
+  // Cache-first; a true cold start still blocks since the form can't
+  // validate submissions without the real limits.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -105,8 +99,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     final bool hasCache = cachedPolicyMap != null || cachedLeaves != null;
 
     if (hasCache) {
-      // Keep the loading state up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Brief artificial delay so the cache read doesn't pop in instantly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (mounted) {
         setState(() {
@@ -116,11 +109,8 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
           _isLoadingLeaves = false;
         });
       }
-      // Silently refresh from the network in the background.
       unawaited(_refreshFromServer(workspaceId));
     } else {
-      // Cold start: nothing cached anywhere, so block until the network
-      // responds.
       await _refreshFromServer(workspaceId);
       if (mounted) setState(() => _isLoadingLeaves = false);
     }
@@ -129,10 +119,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
   static String _leavesCacheKey(String workspaceId) =>
       'cached_leaves_$workspaceId';
 
-  /// Parses the cached leave list JSON (a JSON array of `LeaveModel.toJson()`
-  /// maps), stored under the same `cached_leaves_<workspaceId>` key used by
-  /// the leave list screens, so this screen benefits from whatever they most
-  /// recently cached (and vice versa).
+  // Shares the cached_leaves_<workspaceId> key with the leave list screens.
   List<LeaveModel>? _readCachedLeaves(String? leavesJson) {
     if (leavesJson == null) return null;
     try {
@@ -150,7 +137,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     }
   }
 
-  /// Refreshes policy + leave list from the server in parallel.
   Future<void> _refreshFromServer(String workspaceId) async {
     await Future.wait([
       _fetchPolicyFromServer(),
@@ -158,9 +144,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     ]);
   }
 
-  /// Fetches the leave list fresh from the server, updates state only if it
-  /// actually differs from what's currently held (compared via jsonEncode),
-  /// and refreshes the local cache used on the next cold start.
   Future<void> _fetchLeavesFromServer(String workspaceId) async {
     try {
       final leaves = await _leaveRepo.getMyLeaves(workspaceId);
@@ -182,9 +165,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
 
       await _saveCachedLeaves(workspaceId, newLeavesJson);
     } catch (e) {
-      // The list endpoint is known to be unreliable right now, so fail
-      // open and keep whatever is currently held (cache or previous
-      // state) rather than blocking the request form.
+      // The list endpoint is unreliable; fail open and keep whatever's held.
       debugPrint('[SickLeaveRequestScreen] Failed to load leaves: $e');
     }
   }
@@ -209,12 +190,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     }
   }
 
-  /// Scroll-up-to-refresh for the quota/overlap data backing this form
-  /// (matches the homepage/leave-list gesture). Swaps to the same
-  /// initial-load spinner (see `build`, gated on
-  /// `_isLoadingLeaves || _isRefreshing`) instead of a modal dialog over
-  /// the form, and always clears via `finally` so a failed fetch can't
-  /// permanently block further pull-to-refresh attempts.
+  // Clears via finally so a failed fetch can't block future pull-to-refresh.
   Future<void> _handleRefresh() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);
@@ -252,9 +228,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     return (parsed != null && parsed > 0) ? parsed : null;
   }
 
-  /// Fetches the policy fresh from the server, updates the local cache
-  /// (skipping the write if nothing changed), and refreshes the on-screen
-  /// total. Best-effort: falls back to whatever is cached on failure.
   Future<void> _fetchPolicyFromServer() async {
     final String? workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -539,7 +512,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     );
   }
 
-  // Matches the homepage/leave-screen overscroll gesture.
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,
@@ -804,7 +776,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     if (_pickedFile != null) {
-      // Show attached file state
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -870,7 +841,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       );
     }
 
-    // Show upload prompt with 2 cards
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -42,9 +42,8 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
   late final ScrollController _scrollController;
 
-  // Cache-first: this screen keeps its own cache key, independent from
-  // leave_management_screen.dart / leave_attendance_screen.dart (which use
-  // `cached_leaves_$workspaceId`), so the two never share or clobber state.
+  // Own cache key, kept separate from leave_management_screen.dart's
+  // cached_leaves_$workspaceId, so the two never clobber each other.
   static const String _cacheKeyPrefix = 'cached_leave_all_requests_';
 
   @override
@@ -73,11 +72,8 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     super.dispose();
   }
 
-  /// Scroll-up-to-refresh (matches homepage/leave-management gesture).
-  /// Swaps to the same initial-load loading state (`_buildLoadingState`,
-  /// gated on `_isLoading || _isRefreshing`) instead of a modal dialog over
-  /// the current list, and always clears via `finally` so a failed fetch
-  /// can't permanently block further pull-to-refresh attempts.
+  // Swaps to the loading state (see build) instead of a dialog; always
+  // clears via finally so a failed fetch can't block further pulls.
   Future<void> _handleRefresh() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);
@@ -93,10 +89,8 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     }
   }
 
-  /// Local-first init: show whatever is cached for this workspace instantly
-  /// (no blocking spinner), then silently refresh from the network in the
-  /// background. Only a true cold start (no cache at all) falls back to the
-  /// blocking `_loadData()` fetch.
+  // Local-first: show cached data instantly, then refresh from the network
+  // in the background; only a true cold start blocks on `_loadData()`.
   Future<void> _initLoad() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -114,8 +108,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     if (!mounted) return;
 
     if (cached.isNotEmpty) {
-      // Keep the loading state up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Brief artificial delay so loading doesn't pop in instantly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
       setState(() {
@@ -123,7 +116,6 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
         _applyFilter();
         _isLoading = false;
       });
-      // Background refresh, unconditional, silent (no loader).
       unawaited(_refreshInBackground());
     } else {
       await _loadData();
@@ -149,8 +141,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     }
   }
 
-  /// Silent background refresh: fetches fresh data and only touches state
-  /// (and the cache) if it actually differs from what's already shown.
+  // Silent background refresh; only updates state/cache if data changed.
   Future<void> _refreshInBackground() async {
     final String? workspaceId = _workspaceId;
     if (workspaceId == null) return;
@@ -195,9 +186,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     }
   }
 
-  /// Explicit (blocking) fetch used for: true cold start, pull-to-refresh,
-  /// and reloads after a mutation (delete). Always applies the fetched
-  /// result and keeps the cache in sync on success.
+  // Explicit fetch: cold start, pull-to-refresh, and post-delete reloads.
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -219,8 +208,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       });
       await _saveCachedLeaves(sorted);
     } catch (e) {
-      // The list endpoint is known to be unreliable right now, so fail
-      // open with an empty list rather than crashing the screen.
+      // The list endpoint is known to be unreliable; fail open with an empty list.
       debugPrint('[LeaveAllRequestsScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoading = false);
     }
@@ -497,7 +485,6 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
       child: Column(
         children: [
-          // Date Filter
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -551,7 +538,6 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
             ),
           ).animate().fadeIn(),
           const SizedBox(height: 12),
-          // Sort Dropdown
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(

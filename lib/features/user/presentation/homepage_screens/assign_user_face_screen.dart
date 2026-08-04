@@ -183,7 +183,6 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
         );
 
         try {
-          // Call your repository endpoint
           await applyRegisteredFaceAsProfileImage(faceImageUrl);
 
           if (!mounted) return;
@@ -204,17 +203,12 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
             ),
           );
         } finally {
-          // Dismiss normal loading dialog cleanly
           if (mounted) {
             Navigator.of(context, rootNavigator: true).pop();
           }
         }
       }
     }
-
-    // =========================================================
-    // PHASE 4: FINISH AND RETURN
-    // =========================================================
 
     try {
       await returnToHomepage();

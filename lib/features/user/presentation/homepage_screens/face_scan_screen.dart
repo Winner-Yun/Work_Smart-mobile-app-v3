@@ -295,33 +295,28 @@ class _GuideAccentPainter extends CustomPainter {
     const double headHeight = 150;
     const double cornerSize = 12;
 
-    // Eye position indicators (two small circles)
     const double eyeRadius = 5;
     const double eyeSpacing = 35;
     const double eyeVerticalOffset = -35;
 
-    // Left eye guide circle
     canvas.drawCircle(
       Offset(centerX - eyeSpacing, centerY + eyeVerticalOffset),
       eyeRadius,
       accentPaint,
     );
 
-    // Right eye guide circle
     canvas.drawCircle(
       Offset(centerX + eyeSpacing, centerY + eyeVerticalOffset),
       eyeRadius,
       accentPaint,
     );
 
-    // Chin bottom guide point
     canvas.drawCircle(
       Offset(centerX, centerY + headHeight / 2 - 6),
       4,
       accentPaint,
     );
 
-    // Corner markers for frame alignment (top-left, top-right, bottom-left, bottom-right)
     final List<Offset> corners = [
       Offset(centerX - headWidth / 2 - 30, centerY - headHeight / 2 - 30),
       Offset(centerX + headWidth / 2 + 30, centerY - headHeight / 2 - 30),
@@ -330,13 +325,11 @@ class _GuideAccentPainter extends CustomPainter {
     ];
 
     for (final Offset corner in corners) {
-      // Horizontal line
       canvas.drawLine(
         Offset(corner.dx - cornerSize, corner.dy),
         Offset(corner.dx + cornerSize, corner.dy),
         cornerPaint,
       );
-      // Vertical line
       canvas.drawLine(
         Offset(corner.dx, corner.dy - cornerSize),
         Offset(corner.dx, corner.dy + cornerSize),

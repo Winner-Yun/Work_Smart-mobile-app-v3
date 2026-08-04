@@ -21,19 +21,16 @@ class AttendanceDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date Header
             _buildDateHeader(context, data).animate().fadeIn(delay: 100.ms),
             const SizedBox(height: 24),
 
             if (data['status'] != AppStrings.tr('absent')) ...[
-              // Timeline Card - Check-in/Check-out
               _buildAttendanceTimeline(
                 context,
                 data,
               ).animate().fadeIn(delay: 150.ms),
               const SizedBox(height: 24),
 
-              // Metrics Row
               _buildMetricsRow(context, data).animate().fadeIn(delay: 200.ms),
               const SizedBox(height: 24),
             ] else ...[
@@ -175,7 +172,6 @@ class AttendanceDetailScreen extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Check-in Card
           _buildTimelineCard(
             context,
             Icons.login,
@@ -186,7 +182,6 @@ class AttendanceDetailScreen extends StatelessWidget {
             isLate: data['isLate'] ?? false,
           ),
 
-          // Timeline Connector
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Column(
@@ -216,7 +211,6 @@ class AttendanceDetailScreen extends StatelessWidget {
             ),
           ),
 
-          // Check-out Card
           _buildTimelineCard(
             context,
             Icons.logout,
@@ -314,13 +308,10 @@ class AttendanceDetailScreen extends StatelessWidget {
   Widget _buildMetricsRow(BuildContext context, Map<String, dynamic> data) {
     final bool isLate = data['isLate'] ?? false;
     final String hours = data['hours'] ?? "9h 0m";
-
-    // Calculate punctuality score (100 if on-time, 70 if late)
     final int punctualityScore = isLate ? 70 : 100;
 
     return Row(
       children: [
-        // Total Hours Metric
         Expanded(
           child: _buildMetricCard(
             context,
@@ -331,7 +322,6 @@ class AttendanceDetailScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        // Punctuality Score
         Expanded(
           child: _buildMetricCard(
             context,

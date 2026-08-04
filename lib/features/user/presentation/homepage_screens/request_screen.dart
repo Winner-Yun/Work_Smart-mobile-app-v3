@@ -37,11 +37,8 @@ class _RequestScreenState extends State<RequestScreen> {
   bool _isRefreshing = false;
   bool _scrolledUp = false;
 
-  /// Whether a manual pull-to-refresh (or post-create refresh) is currently
-  /// in flight. Swaps the whole screen to the skeleton loader (see
-  /// `build`), matching the leave-management screen's pull-to-refresh
-  /// behavior — unlike the silent background refresh in `_initData`, which
-  /// never touches this flag.
+  // Manual/post-create refresh only — the silent background refresh in
+  // `_initData` never touches this flag.
   bool get isRefreshing => _isRefreshing;
 
   SharedPreferences? _prefs;
@@ -59,8 +56,7 @@ class _RequestScreenState extends State<RequestScreen> {
     _initData();
   }
 
-  // Matches the homepage/leave-screen overscroll gesture: drag past the
-  // top past a threshold, then release to trigger a refresh.
+  // Matches the homepage/leave-screen overscroll-to-refresh gesture.
   void _onScroll() {
     if (_scrollController.position.pixels < -100 &&
         !_scrolledUp &&
@@ -79,10 +75,8 @@ class _RequestScreenState extends State<RequestScreen> {
     super.dispose();
   }
 
-  /// Cache-first init: load whatever is cached locally and show it
-  /// immediately (no blocking skeleton), then silently refresh from the
-  /// network in the background. Only shows the skeleton loader on a true
-  /// cold start (no cached data at all).
+  // Cache-first: show cached data immediately, then refresh from the
+  // network in the background; only a true cold start shows the skeleton.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -99,21 +93,16 @@ class _RequestScreenState extends State<RequestScreen> {
     if (!mounted) return;
 
     if (hasLocalData) {
-      // Keep the skeleton up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Brief artificial delay so loading doesn't pop in instantly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
       setState(() => _isLoading = false);
-      // Always refresh in the background on screen open.
       _fetchFromNetwork(showLoading: false);
     } else {
-      // No local data at all -> need network with loader.
       await _fetchFromNetwork(showLoading: true);
     }
   }
 
-  /// Loads the cached request list from SharedPreferences, if any.
-  /// Returns true if any cached requests were found.
   Future<bool> _loadFromLocal() async {
     final prefs = _prefs;
     final cacheKey = _cacheKey;
@@ -138,11 +127,8 @@ class _RequestScreenState extends State<RequestScreen> {
     }
   }
 
-  /// Fetches requests from the network and updates the UI + cache only if
-  /// the freshly-fetched list actually differs from what's in memory.
-  /// Only toggles `_isLoading` (cold-start skeleton) — `_isRefreshing` is
-  /// owned by `_loadRequests`, since this is also called for the silent
-  /// background refresh in `_initData`, which must stay invisible.
+  // Only toggles _isLoading — _isRefreshing is owned by `_loadRequests`;
+  // also used for the silent background refresh in `_initData`.
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
     final workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -187,13 +173,9 @@ class _RequestScreenState extends State<RequestScreen> {
     }
   }
 
-  /// Manual pull-to-refresh (triggered by the overscroll gesture, see
-  /// `_onScroll`) / post-create refresh: swaps the whole screen to the
-  /// skeleton loader (see `build`, gated on `_isLoading || _isRefreshing`)
-  /// instead of leaving the small overscroll indicator over stale content,
-  /// and always clears `_isRefreshing` in `finally` — without that
-  /// guarantee, an uncaught error partway through would permanently disable
-  /// further pulls (`_onScroll` only fires while `!_isRefreshing`).
+  // Swaps to the skeleton (see build) instead of the overscroll indicator;
+  // always clears `_isRefreshing` in finally so a failed refresh can't
+  // permanently block further pulls.
   Future<void> _loadRequests() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);
@@ -348,9 +330,7 @@ class _RequestScreenState extends State<RequestScreen> {
     );
   }
 
-  // Matches the homepage/leave-screen overscroll gesture: drag past the top,
-  // the arrow rotates and fills in, release past ~95% to trigger a refresh
-  // (see _onScroll).
+  // Matches the homepage/leave-screen overscroll-to-refresh gesture.
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,

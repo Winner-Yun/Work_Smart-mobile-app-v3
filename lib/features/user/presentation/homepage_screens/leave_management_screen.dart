@@ -38,8 +38,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   late Animation<double> _annualAnimation;
   late Animation<double> _sickAnimation;
 
-  // Fallback totals used until the workspace policy (cached locally, or
-  // freshly fetched from the server) provides the real limits.
+  // Fallback totals until the workspace policy loads.
   static const int _defaultAnnualTotal = 18;
   static const int _defaultSickTotal = 5;
   int _annualTotal = _defaultAnnualTotal;
@@ -67,15 +66,13 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   void initState() {
     super.initState();
 
-    // Set up animation controllers
     _annualController = AnimationController(vsync: this, duration: 1500.ms);
     _sickController = AnimationController(vsync: this, duration: 1500.ms);
 
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
 
-    // Now create the animations; they'll be re-targeted once real data
-    // (and the real policy totals) have loaded.
+    // Re-targeted once real data (and policy totals) have loaded.
     _annualAnimation = Tween<double>(begin: 0, end: _annualRatio).animate(
       CurvedAnimation(parent: _annualController, curve: Curves.easeInOut),
     );
@@ -97,12 +94,8 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     }
   }
 
-  /// Cache-first: render whatever's cached locally (policy + leave list)
-  /// immediately — no blocking skeleton — then silently refresh both from
-  /// the server in the background and update in place only if something
-  /// actually changed. A true cold start (neither cached) is the only case
-  /// that still waits on the network, since there's nothing meaningful to
-  /// show otherwise.
+  // Cache-first: render cached data immediately, then refresh from the
+  // server in the background; only a true cold start blocks on the network.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -123,8 +116,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
 
     if (hasLocalData) {
       _applyPolicyLimits(cachedPolicyMap);
-      // Keep the skeleton up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Brief artificial delay so loading doesn't pop in instantly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (mounted) {
         setState(() {
@@ -140,9 +132,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     }
   }
 
-  /// Silently re-fetches policy + leave list from the server after the
-  /// cache-first render above, and updates the UI in place only if the
-  /// fetched data actually differs from what's already shown.
+  // Silent background refresh; updates UI/cache only if data changed.
   Future<void> _refreshFromServerInBackground() async {
     final String? workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -169,15 +159,11 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       final prefs = await SharedPreferences.getInstance();
       await _saveCachedLeaves(prefs, workspaceId, fetchedLeaves);
     } catch (e) {
-      // Best-effort background refresh; the cache-first data already on
-      // screen stays put on failure.
+      // Best-effort: on failure, the cache-first data already shown stays put.
       debugPrint('[LeaveDetailScreen] Background leave refresh failed: $e');
     }
   }
 
-  /// Reads the cached leave list (SharedPreferences JSON array of
-  /// `LeaveModel.toJson()`) for [workspaceId]. Returns null if nothing is
-  /// cached or it fails to decode.
   Future<List<LeaveModel>?> _readCachedLeaves(
     SharedPreferences prefs,
     String workspaceId,
@@ -215,8 +201,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       return;
     }
 
-    // Leave totals come from the workspace policy, cached locally — read it
-    // here instead of hardcoding limits.
+    // Leave totals come from the cached policy, not hardcoded.
     final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
       _workspaceId!,
     );
@@ -232,8 +217,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       });
       await _saveCachedLeaves(prefs, _workspaceId!, leaves);
     } catch (e) {
-      // The list endpoint is known to be unreliable right now, so fail
-      // open with an empty list rather than crashing the screen.
+      // The list endpoint is known to be unreliable; fail open with an empty list.
       debugPrint('[LeaveDetailScreen] Failed to load leaves: $e');
       if (mounted) {
         setState(() {
@@ -262,9 +246,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     return (parsed != null && parsed > 0) ? parsed : null;
   }
 
-  /// Fetches the policy fresh from the server, updates the local cache
-  /// (skipping the write if nothing changed), and refreshes the on-screen
-  /// totals. Best-effort: falls back to whatever is cached on failure.
+  // Best-effort: falls back to whatever policy is cached on failure.
   Future<void> _fetchPolicyFromServer() async {
     final String? workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -303,23 +285,12 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
         _sickRatio = (_sickUsed / _sickTotal).clamp(0, 1).toDouble();
       });
     } catch (e) {
-      // Policy refresh is best-effort; fall back to whatever is cached.
       debugPrint('[LeaveDetailScreen] Failed to refresh policy: $e');
     }
   }
 
-  /// Pull-to-refresh (triggered by overscrolling past the top, matching the
-  /// homepage gesture): re-fetches the policy fresh and reloads the leave
-  /// list. Guarded by `_isRefreshing`/`_scrolledUp` (see `_onScroll`) so a
-  /// single pull gesture only triggers one round of calls instead of firing
-  /// again on every scroll event while overscrolled.
-  ///
-  /// Swaps to the same full skeleton as the initial load (see `build`,
-  /// gated on `_isLoading || _isRefreshing`) instead of a modal dialog over
-  /// stale content, and always clears `_isRefreshing` in `finally` —
-  /// without that guarantee, an uncaught error partway through would
-  /// permanently disable further pull-to-refresh attempts (`_onScroll`
-  /// only fires while `!_isRefreshing`).
+  // Guarded by _isRefreshing/_scrolledUp so one pull only triggers one refresh.
+  // Always clears _isRefreshing in finally, or a failed refresh would permanently block future pulls.
   Future<void> _handleRefresh() async {
     if (_isRefreshing) return;
     if (!mounted) return;
@@ -368,7 +339,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
   }
 
   void _updateAnimations() {
-    // Update animations with new ratio values
     _annualAnimation = Tween<double>(begin: 0, end: _annualRatio).animate(
       CurvedAnimation(parent: _annualController, curve: Curves.easeInOut),
     );
@@ -376,7 +346,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       CurvedAnimation(parent: _sickController, curve: Curves.easeInOut),
     );
 
-    // Restart animations
     _annualController.forward(from: 0);
     _sickController.forward(from: 0);
   }
@@ -500,10 +469,8 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     );
   }
 
-  // --- Pull-to-refresh indicator: matches the homepage's overscroll-driven
-  // rotating arrow → refresh icon. Once the pull is released, `_isRefreshing`
-  // swaps the whole screen to the skeleton loader (see `build` above) so
-  // this indicator never needs its own "loading" state or text.
+  // _isRefreshing swaps the whole screen to skeleton, so this indicator
+  // needs no loading state of its own.
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,

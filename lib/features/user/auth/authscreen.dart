@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/features/user/auth/auth_logic.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class Authscreen extends StatefulWidget {
   const Authscreen({super.key});
@@ -19,8 +21,6 @@ class _AuthscreenState extends State<Authscreen> {
   bool _handledSuspendedRouteAlert = false;
   bool _handledDeletedRouteAlert = false;
   late AuthLogic authLogic;
-
-  // ─────────── SCREEN INITIALIZATION ───────────
 
   @override
   void initState() {
@@ -61,8 +61,6 @@ class _AuthscreenState extends State<Authscreen> {
     }
   }
 
-  // ─────────── LOGIN PROCESSING ───────────
-
   Future<void> _handleGoogleSignIn() async {
     if (_isLoggingIn) {
       return;
@@ -91,7 +89,6 @@ class _AuthscreenState extends State<Authscreen> {
     }
   }
 
-  // ─────────── MAIN WIDGET BUILD ───────────
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -320,9 +317,7 @@ class _AuthscreenState extends State<Authscreen> {
     );
   }
 
-  // ─────────── GOOGLE SIGN-IN PANEL ───────────
-  // Replaces the old username/password form: sign-up and login are the
-  // same action here — the backend upserts the account on first sign-in.
+  // Sign-up and login are the same action here — the backend upserts on first sign-in.
   Widget _buildGoogleSignInPanel(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,6 +462,15 @@ class _AuthscreenState extends State<Authscreen> {
             children: [
               TextSpan(text: AppStrings.tr('terms_agreement_prefix')),
               TextSpan(
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () async {
+                    final Uri url = Uri.parse(
+                      'https://worksmart-dashboard-production.up.railway.app/terms-of-service',
+                    );
+                    if (!await launchUrl(url)) {
+                      throw Exception('Could not launch $url');
+                    }
+                  },
                 text: AppStrings.tr('terms_of_service'),
                 style: TextStyle(
                   color: theme.colorScheme.primary,
@@ -475,6 +479,15 @@ class _AuthscreenState extends State<Authscreen> {
               ),
               TextSpan(text: AppStrings.tr('terms_agreement_and')),
               TextSpan(
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () async {
+                    final Uri url = Uri.parse(
+                      'https://worksmart-dashboard-production.up.railway.app/privacy-policy',
+                    );
+                    if (!await launchUrl(url)) {
+                      throw Exception('Could not launch $url');
+                    }
+                  },
                 text: AppStrings.tr('privacy_policy'),
                 style: TextStyle(
                   color: theme.colorScheme.primary,

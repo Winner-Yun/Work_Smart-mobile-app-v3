@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
-import 'package:flutter_worksmart_app/core/constants/app_strings.dart'; // Added AppStrings
+import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/auth/tutorail_screens/tutorial_content.dart';
 
@@ -106,7 +106,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
                 child: TextButton(
                   onPressed: _completeTutorial,
                   child: Text(
-                    AppStrings.tr('skip'), // "រំលង"
+                    AppStrings.tr('skip'),
                     style: TextStyle(color: theme.textTheme.bodySmall?.color),
                   ),
                 ),
@@ -124,7 +124,6 @@ class _TutorialScreenState extends State<TutorialScreen> {
                   },
                   itemBuilder: (context, index) {
                     final data = _tutorialData[index];
-                    // DEV NOTE: We now translate keys here before passing to Widget
                     return TutorialContent(
                       imagePath: data['image'],
                       title: AppStrings.tr(data['title']),

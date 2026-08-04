@@ -49,10 +49,8 @@ class _AttendanceStatsScreenState extends AttendanceStatsLogic {
 
   @override
   Widget build(BuildContext context) {
-    // Guard against empty monthlyStats during initial load, and also show
-    // the same skeleton during manual pull-to-refresh (isRefreshing here is
-    // only ever set by onRefresh — the silent cache-first background
-    // refresh never touches it).
+    // isRefreshing is only set by manual pull-to-refresh, not the silent
+    // background refresh, so this also covers the empty initial-load state.
     if (monthlyStats.isEmpty || isRefreshing) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -108,11 +106,8 @@ class _AttendanceStatsScreenState extends AttendanceStatsLogic {
     );
   }
 
-  // Matches the homepage/leave-screen overscroll gesture: drag past the top,
-  // the arrow rotates and fills in, release past ~95% to trigger onRefresh
-  // (see _onScroll). Hides once loading/refreshing since the full skeleton
-  // (shown by onRefresh via isRefreshing) takes over the loading feedback
-  // from there.
+  // Mirrors the homepage/leave-screen overscroll gesture; hides once
+  // isRefreshing shows the full skeleton (see _onScroll).
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,
