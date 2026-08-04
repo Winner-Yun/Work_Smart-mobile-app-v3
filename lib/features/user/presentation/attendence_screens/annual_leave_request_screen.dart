@@ -7,11 +7,11 @@ import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
+import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
-import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -83,10 +83,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
             .replaceAll('{remainingDays}', _annualLeaveRemaining.toString());
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );
   }
 
@@ -214,9 +211,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     try {
       final List<dynamic> decoded = jsonDecode(leavesJson) as List<dynamic>;
       return decoded
-          .map(
-            (e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)),
-          )
+          .map((e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (e) {
       debugPrint(
@@ -308,9 +303,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
   }
 
   void _applyPolicyLimit(Map<String, dynamic>? policyMap) {
-    final int? annualLimit = _readPositiveInt(
-      policyMap?['annual_leave_limit'],
-    );
+    final int? annualLimit = _readPositiveInt(policyMap?['annual_leave_limit']);
     if (annualLimit != null) _annualLeaveTotal = annualLimit;
   }
 
@@ -1156,7 +1149,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       leading: IconButton(
         icon: Icon(
           Icons.arrow_back_ios,
-          color: Theme.of(context).iconTheme.color,
+          color: Theme.of(context).colorScheme.primary,
           size: 20,
         ),
         onPressed: () => Navigator.pop(context),
@@ -1164,7 +1157,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       title: Text(
         AppStrings.tr('request_annual_leave_title'),
         style: TextStyle(
-          color: Theme.of(context).textTheme.bodyLarge?.color,
+          color: Theme.of(context).colorScheme.primary,
           fontSize: 18,
           fontWeight: FontWeight.bold,
         ),

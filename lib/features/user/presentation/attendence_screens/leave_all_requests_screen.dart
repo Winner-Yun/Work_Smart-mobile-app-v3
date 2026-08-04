@@ -7,11 +7,12 @@ import 'package:flutter_worksmart_app/core/constants/app_durations.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
-import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_detail_view_screen.dart';
+import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
+import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/leave_all_requests_skeleton_loading.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -153,9 +154,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       final List<LeaveModel> sorted = leaves.toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      final String newJson = jsonEncode(
-        sorted.map((e) => e.toJson()).toList(),
-      );
+      final String newJson = jsonEncode(sorted.map((e) => e.toJson()).toList());
       final String currentJson = jsonEncode(
         _history.map((e) => e.toJson()).toList(),
       );
@@ -464,7 +463,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       leading: IconButton(
         icon: Icon(
           Icons.arrow_back_ios,
-          color: Theme.of(context).iconTheme.color,
+          color: Theme.of(context).colorScheme.primary,
           size: 20,
         ),
         onPressed: _popWithResult,
@@ -472,7 +471,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       title: Text(
         AppStrings.tr('request_history'),
         style: TextStyle(
-          color: Theme.of(context).textTheme.bodyLarge?.color,
+          color: Theme.of(context).colorScheme.primary,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -637,13 +636,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
   }
 
   Widget _buildLoadingState(BuildContext context) {
-    return Center(
-      child: CircularProgressIndicator(
-        valueColor: AlwaysStoppedAnimation<Color>(
-          Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
+    return const LeaveAllRequestsSkeletonLoading();
   }
 
   Widget _buildRequestListItem(LeaveModel record) {

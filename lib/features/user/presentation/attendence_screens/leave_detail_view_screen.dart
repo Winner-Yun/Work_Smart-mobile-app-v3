@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
+import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/features/user/repository/leave_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/leave_service.dart';
-import 'package:flutter_worksmart_app/features/user/logic/leave_request_logic.dart';
 import 'package:flutter_worksmart_app/shared/model/leave_model.dart';
 import 'package:intl/intl.dart';
 
@@ -95,7 +95,7 @@ class _LeaveDetailViewScreenState extends State<LeaveDetailViewScreen> {
       leading: IconButton(
         icon: Icon(
           Icons.arrow_back_ios,
-          color: Theme.of(context).iconTheme.color,
+          color: Theme.of(context).colorScheme.primary,
           size: 20,
         ),
         onPressed: () => Navigator.pop(context),

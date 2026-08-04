@@ -1,7 +1,7 @@
 /// Leave Management & Requests strings
 const Map<String, String> leaveManagementStringsEn = {
   'leave_details_title': 'Leave Details',
-  'request_history': 'Request History',
+  'request_history': 'Leave Request History',
   'you_have_remaining_leave': 'You have',
   'this_year': 'of leave remaining for this year.',
   'remaining': 'Remaining',
@@ -14,9 +14,11 @@ const Map<String, String> leaveManagementStringsEn = {
   'days_remaining': 'Days Remaining',
   'recent_requests': 'Recent Requests',
   'remove_leave_request_title': 'Remove leave request',
-  'remove_leave_request_message': 'Are you sure you want to remove this request?',
+  'remove_leave_request_message':
+      'Are you sure you want to remove this request?',
   'remove_leave_request_not_allowed_title': 'Cannot remove approved leave',
-  'remove_leave_request_not_allowed_message': 'Approved leave requests cannot be removed.',
+  'remove_leave_request_not_allowed_message':
+      'Approved leave requests cannot be removed.',
   'remove_button': 'Remove',
   'leave_request_removed': 'Leave request removed',
   'sort_newest_date': 'Newest Date',
@@ -29,7 +31,7 @@ const Map<String, String> leaveManagementStringsEn = {
 
 const Map<String, String> leaveManagementStringsKm = {
   'leave_details_title': 'ព័ត៌មានលម្អិតការឈប់សម្រាក',
-  'request_history': 'ប្រវត្តិការស្នើសុំ',
+  'request_history': 'ប្រវត្តិការស្នើសុំច្បាប់',
   'you_have_remaining_leave': 'អ្នកនៅសល់ច្បាប់សម្រាកចំនួន',
   'this_year': 'សម្រាប់ឆ្នាំនេះ។',
   'remaining': 'នៅសល់',

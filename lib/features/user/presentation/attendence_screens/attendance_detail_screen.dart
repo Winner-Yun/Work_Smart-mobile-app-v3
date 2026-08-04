@@ -49,7 +49,7 @@ class AttendanceDetailScreen extends StatelessWidget {
       leading: IconButton(
         icon: Icon(
           Icons.arrow_back_ios,
-          color: Theme.of(context).iconTheme.color,
+          color: Theme.of(context).colorScheme.primary,
           size: 20,
         ),
         onPressed: () => Navigator.pop(context),

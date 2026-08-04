@@ -14,6 +14,7 @@ import 'package:flutter_worksmart_app/features/user/service/attendance_service.d
 import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/attendance_calendar_skeleton_loading.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -519,7 +520,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AttendanceCalendarSkeletonLoading()
           : SingleChildScrollView(
               child: Column(
                 children: [

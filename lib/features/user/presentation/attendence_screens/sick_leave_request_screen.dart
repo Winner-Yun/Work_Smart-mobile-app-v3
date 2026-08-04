@@ -125,14 +125,10 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     try {
       final List<dynamic> decoded = jsonDecode(leavesJson) as List<dynamic>;
       return decoded
-          .map(
-            (e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)),
-          )
+          .map((e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (e) {
-      debugPrint(
-        '[SickLeaveRequestScreen] Failed to parse cached leaves: $e',
-      );
+      debugPrint('[SickLeaveRequestScreen] Failed to parse cached leaves: $e');
       return null;
     }
   }
@@ -460,47 +456,51 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
                         _buildTopInfoCard(context),
                         Padding(
                           padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildSectionTitle(
-                                AppStrings.tr('request_details'),
-                                context,
-                              ),
-                              const SizedBox(height: 15),
-                              _buildInputCard(context, [
-                                _buildLabel(
-                                  AppStrings.tr('reason_for_sickness'),
-                                  context,
-                                ),
-                                _buildTextField(
-                                  context: context,
-                                  hint: AppStrings.tr('sickness_reason_hint'),
-                                  icon: Icons.edit_note,
-                                  controller: _reasonController,
-                                ),
-                                const SizedBox(height: 20),
-                                _buildLabel(
-                                  AppStrings.tr('leave_date'),
-                                  context,
-                                ),
-                                _buildAutoSelectedDateField(context),
-                              ]),
-                              const SizedBox(height: 25),
-                              _buildSectionTitle(
-                                AppStrings.tr('medical_documents'),
-                                context,
-                              ),
-                              const SizedBox(height: 15),
-                              _buildUploadArea(context),
-                              const SizedBox(height: 40),
-                              _buildSubmitButton(context),
-                              const SizedBox(height: 20),
-                            ],
-                          ).animate().fadeIn(duration: 600.ms).slideY(
-                            begin: 0.1,
-                            end: 0,
-                          ),
+                          child:
+                              Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _buildSectionTitle(
+                                        AppStrings.tr('request_details'),
+                                        context,
+                                      ),
+                                      const SizedBox(height: 15),
+                                      _buildInputCard(context, [
+                                        _buildLabel(
+                                          AppStrings.tr('reason_for_sickness'),
+                                          context,
+                                        ),
+                                        _buildTextField(
+                                          context: context,
+                                          hint: AppStrings.tr(
+                                            'sickness_reason_hint',
+                                          ),
+                                          icon: Icons.edit_note,
+                                          controller: _reasonController,
+                                        ),
+                                        const SizedBox(height: 20),
+                                        _buildLabel(
+                                          AppStrings.tr('leave_date'),
+                                          context,
+                                        ),
+                                        _buildAutoSelectedDateField(context),
+                                      ]),
+                                      const SizedBox(height: 25),
+                                      _buildSectionTitle(
+                                        AppStrings.tr('medical_documents'),
+                                        context,
+                                      ),
+                                      const SizedBox(height: 15),
+                                      _buildUploadArea(context),
+                                      const SizedBox(height: 40),
+                                      _buildSubmitButton(context),
+                                      const SizedBox(height: 20),
+                                    ],
+                                  )
+                                  .animate()
+                                  .fadeIn(duration: 600.ms)
+                                  .slideY(begin: 0.1, end: 0),
                         ),
                       ],
                     ),
@@ -575,13 +575,16 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       elevation: 0.5,
       scrolledUnderElevation: 0,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: Theme.of(context).iconTheme.color),
+        icon: Icon(
+          Icons.arrow_back,
+          color: Theme.of(context).colorScheme.primary,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       title: Text(
         AppStrings.tr('request_sick_leave_title'),
         style: TextStyle(
-          color: Theme.of(context).textTheme.bodyLarge?.color,
+          color: Theme.of(context).colorScheme.primary,
           fontSize: 18,
           fontWeight: FontWeight.bold,
         ),

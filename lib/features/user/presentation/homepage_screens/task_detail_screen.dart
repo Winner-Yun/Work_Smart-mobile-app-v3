@@ -180,10 +180,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       case 'completed':
         return AppColors.success;
       case 'in_progress':
-        return AppColors.warning;
+        return AppColors.info;
       case 'pending':
       default:
-        return AppColors.textGrey;
+        return AppColors.warning;
     }
   }
 
@@ -226,79 +226,46 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          backgroundColor: Theme.of(context).primaryColor,
           elevation: 0,
           scrolledUnderElevation: 0,
           leading: IconButton(
-            icon: Icon(
+            icon: const Icon(
               Icons.arrow_back_ios,
-              color: Theme.of(context).colorScheme.primary,
+              color: Colors.white,
               size: 20,
             ),
             onPressed: () => Navigator.pop(context, _changed ? _task : null),
           ),
           title: Text(
             AppStrings.tr('task_details_title'),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
+            style: const TextStyle(
+              color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: 18,
             ),
           ),
           centerTitle: true,
         ),
-        body: Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStatusHeader(
-                    statusColor,
-                  ).animate().fadeIn(delay: 100.ms),
-                  const SizedBox(height: 20),
-                  _buildDetailsGrid(
-                    priorityColor,
-                  ).animate().fadeIn(delay: 150.ms),
-                  const SizedBox(height: 20),
-                  _buildDescriptionSection().animate().fadeIn(delay: 200.ms),
-                  if (_task.assignedTo.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    _buildAssignedSection().animate().fadeIn(delay: 250.ms),
-                  ],
-                  const SizedBox(height: 30),
-                  _buildUpdateStatusButton().animate().fadeIn(delay: 300.ms),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-            if (_isUpdating)
-              Positioned.fill(
-                child: AbsorbPointer(
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 18,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardTheme.color,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const SizedBox(
-                          height: 28,
-                          width: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStatusHeader(statusColor).animate().fadeIn(delay: 100.ms),
+              const SizedBox(height: 20),
+              _buildDetailsGrid(priorityColor).animate().fadeIn(delay: 150.ms),
+              const SizedBox(height: 20),
+              _buildDescriptionSection().animate().fadeIn(delay: 200.ms),
+              if (_task.assignedTo.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _buildAssignedSection().animate().fadeIn(delay: 250.ms),
+              ],
+              const SizedBox(height: 30),
+              _buildUpdateStatusButton().animate().fadeIn(delay: 300.ms),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -306,63 +273,48 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   Widget _buildStatusHeader(Color statusColor) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            statusColor.withValues(alpha: 0.15),
-            statusColor.withValues(alpha: 0.05),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: statusColor.withValues(alpha: 0.2), width: 1),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 12),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+          Text(
+            _task.title,
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodyLarge?.color,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
             ),
-            child: Icon(Icons.task_alt_rounded, color: statusColor, size: 28),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _task.title,
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _statusLabel(_task.status),
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _statusLabel(_task.status),
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -558,18 +510,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         onPressed: _isUpdating ? null : _openStatusSheet,
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).colorScheme.primary,
+          disabledBackgroundColor: Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: 0.6),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
         ),
-        icon: const Icon(
-          Icons.sync_alt_rounded,
-          color: AppColors.textLight,
-          size: 18,
-        ),
+        icon: _isUpdating
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.textLight,
+                ),
+              )
+            : const Icon(
+                Icons.sync_alt_rounded,
+                color: AppColors.textLight,
+                size: 18,
+              ),
         label: Text(
-          AppStrings.tr('update_status_button'),
+          _isUpdating
+              ? AppStrings.tr('updating_status')
+              : AppStrings.tr('update_status_button'),
           style: const TextStyle(
             color: AppColors.textLight,
             fontWeight: FontWeight.bold,

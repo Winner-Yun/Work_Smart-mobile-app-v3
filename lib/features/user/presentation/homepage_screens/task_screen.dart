@@ -31,9 +31,16 @@ class _TaskScreenState extends State<TaskScreen> {
   bool _isRefreshing = false;
   bool _scrolledUp = false;
 
+  // Set by tapping a stat in the header; null shows every task.
+  String? _statusFilter;
+
   // Manual pull-to-refresh only — the silent background refresh in
   // `_initData` never touches this flag.
   bool get isRefreshing => _isRefreshing;
+
+  List<TaskModel> get _visibleTasks => _statusFilter == null
+      ? _tasks
+      : _tasks.where((t) => t.status == _statusFilter).toList();
 
   SharedPreferences? _prefs;
   late final ScrollController _scrollController;
@@ -221,7 +228,7 @@ class _TaskScreenState extends State<TaskScreen> {
       case 'completed':
         return AppColors.success;
       case 'in_progress':
-        return AppColors.warning;
+        return AppColors.info;
       case 'pending':
       default:
         return AppColors.warning;
@@ -254,23 +261,22 @@ class _TaskScreenState extends State<TaskScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<TaskModel> visibleTasks = _visibleTasks;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: Theme.of(context).primaryColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           AppStrings.tr('task_menu'),
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
+          style: const TextStyle(
+            color: Colors.white,
             fontSize: 22,
             fontWeight: FontWeight.bold,
           ),
@@ -282,43 +288,162 @@ class _TaskScreenState extends State<TaskScreen> {
           : Stack(
               alignment: Alignment.topCenter,
               children: [
-                _tasks.isEmpty
-                    ? ListView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
-                        ),
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.6,
-                            child: DataEmptyState(
-                              imageAsset: AppImg.emptyState,
-                              message: AppStrings.tr('no_tasks_yet'),
-                            ),
-                          ).animate().fadeIn(duration: 300.ms),
-                        ],
+                CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      sliver: SliverToBoxAdapter(child: _buildStatsHeader()),
+                    ),
+                    if (visibleTasks.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.45,
+                          child: DataEmptyState(
+                            imageAsset: AppImg.emptyState,
+                            message: AppStrings.tr('no_tasks_yet'),
+                          ),
+                        ).animate().fadeIn(duration: 300.ms),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(20),
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              return _buildTaskItem(visibleTasks[index])
+                                  .animate()
+                                  .fadeIn(
+                                    delay: (60 * index).ms,
+                                    duration: 240.ms,
+                                  )
+                                  .slideY(
+                                    begin: 0.08,
+                                    end: 0,
+                                    curve: Curves.easeOut,
+                                  );
+                            },
+                            childCount: visibleTasks.length,
+                          ),
                         ),
-                        itemCount: _tasks.length,
-                        itemBuilder: (context, index) {
-                          return _buildTaskItem(_tasks[index])
-                              .animate()
-                              .fadeIn(delay: (60 * index).ms, duration: 240.ms)
-                              .slideY(
-                                begin: 0.08,
-                                end: 0,
-                                curve: Curves.easeOut,
-                              );
-                        },
                       ),
+                  ],
+                ),
                 _buildPullToRefreshIndicator(),
               ],
             ),
+    );
+  }
+
+  Widget _buildStatsHeader() {
+    final int pendingCount = _tasks
+        .where((t) => t.status == 'pending')
+        .length;
+    final int inProgressCount = _tasks
+        .where((t) => t.status == 'in_progress')
+        .length;
+    final int completedCount = _tasks
+        .where((t) => t.status == 'completed')
+        .length;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 18),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatTile(
+              AppColors.warning,
+              pendingCount,
+              AppStrings.tr('request_status_pending'),
+              'pending',
+            ),
+          ),
+          _buildStatDivider(),
+          Expanded(
+            child: _buildStatTile(
+              AppColors.info,
+              inProgressCount,
+              AppStrings.tr('request_status_in_progress'),
+              'in_progress',
+            ),
+          ),
+          _buildStatDivider(),
+          Expanded(
+            child: _buildStatTile(
+              AppColors.success,
+              completedCount,
+              AppStrings.tr('request_status_completed'),
+              'completed',
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05, end: 0);
+  }
+
+  Widget _buildStatTile(Color color, int count, String label, String status) {
+    final bool isSelected = _statusFilter == status;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        setState(() => _statusFilter = isSelected ? null : status);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 5),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: 3,
+              width: isSelected ? 22 : 0,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatDivider() {
+    return Container(
+      width: 1,
+      height: 40,
+      color: Theme.of(context).dividerColor.withOpacity(0.15),
     );
   }
 
@@ -387,22 +512,18 @@ class _TaskScreenState extends State<TaskScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         onTap: () => _openTaskDetail(task),
         focusColor: Colors.transparent,
         highlightColor: Colors.transparent,
         splashColor: Colors.transparent,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
             color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 14),
             ],
           ),
           child: IntrinsicHeight(
@@ -414,7 +535,7 @@ class _TaskScreenState extends State<TaskScreen> {
                   decoration: BoxDecoration(
                     color: priorityColor,
                     borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(16),
+                      left: Radius.circular(20),
                     ),
                   ),
                 ),

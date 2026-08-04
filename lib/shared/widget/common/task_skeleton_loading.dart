@@ -40,18 +40,94 @@ class _TaskSkeletonLoadingState extends State<TaskSkeletonLoading>
             Color.lerp(dimmedColor, brightColor, _controller.value) ??
             shimmerColor;
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(20),
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 6,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _SkeletonTaskItem(color: animatedColor, opacity: pulse),
-            );
-          },
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: _SkeletonStatsHeader(
+                color: animatedColor,
+                opacity: pulse,
+                tileCount: 3,
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: 6,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _SkeletonTaskItem(
+                      color: animatedColor,
+                      opacity: pulse,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _SkeletonStatsHeader extends StatelessWidget {
+  final Color color;
+  final double opacity;
+  final int tileCount;
+
+  const _SkeletonStatsHeader({
+    required this.color,
+    required this.opacity,
+    required this.tileCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 18),
+        ],
+      ),
+      child: Row(
+        children: [
+          for (int i = 0; i < tileCount; i++) ...[
+            if (i > 0)
+              Container(
+                width: 1,
+                height: 40,
+                color: Theme.of(context).dividerColor.withOpacity(0.15),
+              ),
+            Expanded(
+              child: Column(
+                children: [
+                  _SkeletonBox(
+                    width: 28,
+                    height: 17,
+                    color: color,
+                    opacity: opacity,
+                    radius: 6,
+                  ),
+                  const SizedBox(height: 6),
+                  _SkeletonBox(
+                    width: 44,
+                    height: 10,
+                    color: color,
+                    opacity: opacity,
+                    radius: 5,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -65,18 +141,39 @@ class _SkeletonTaskItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 14),
         ],
       ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Opacity(
+              opacity: opacity,
+              child: Container(
+                width: 5,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: _buildContent(context)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

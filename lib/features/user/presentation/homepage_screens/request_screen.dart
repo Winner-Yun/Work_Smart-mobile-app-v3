@@ -37,9 +37,18 @@ class _RequestScreenState extends State<RequestScreen> {
   bool _isRefreshing = false;
   bool _scrolledUp = false;
 
+  // Set by tapping a stat in the header; null shows every request.
+  String? _statusFilter;
+
   // Manual/post-create refresh only — the silent background refresh in
   // `_initData` never touches this flag.
   bool get isRefreshing => _isRefreshing;
+
+  List<RequestModel> get _visibleRequests => _statusFilter == null
+      ? _requests
+      : _requests
+            .where((r) => r.status.toLowerCase() == _statusFilter)
+            .toList();
 
   SharedPreferences? _prefs;
   late final ScrollController _scrollController;
@@ -222,7 +231,7 @@ class _RequestScreenState extends State<RequestScreen> {
       case 'completed':
         return AppColors.success;
       case 'in_progress':
-        return AppColors.warning;
+        return Colors.purple;
       case 'seen':
         return AppColors.info;
       case 'pending':
@@ -261,23 +270,27 @@ class _RequestScreenState extends State<RequestScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<RequestModel> visibleRequests = _visibleRequests;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: Theme.of(context).primaryColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
           AppStrings.tr('request_menu'),
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
+          style: const TextStyle(
+            color: Colors.white,
             fontSize: 22,
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [TaskIconButton(loginData: widget.loginData)],
+        actions: [
+          TaskIconButton(loginData: widget.loginData, iconColor: Colors.white),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openCreateSheet,
@@ -290,43 +303,174 @@ class _RequestScreenState extends State<RequestScreen> {
           : Stack(
               alignment: Alignment.topCenter,
               children: [
-                _requests.isEmpty
-                    ? ListView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
-                        ),
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.6,
-                            child: DataEmptyState(
-                              imageAsset: AppImg.emptyState,
-                              message: AppStrings.tr('no_requests_yet'),
-                            ),
-                          ).animate().fadeIn(duration: 300.ms),
-                        ],
+                CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      sliver: SliverToBoxAdapter(child: _buildStatsHeader()),
+                    ),
+                    if (visibleRequests.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.4,
+                          child: DataEmptyState(
+                            imageAsset: AppImg.emptyState,
+                            message: AppStrings.tr('no_requests_yet'),
+                          ),
+                        ).animate().fadeIn(duration: 300.ms),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 90),
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 90),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            return _buildRequestItem(visibleRequests[index])
+                                .animate()
+                                .fadeIn(
+                                  delay: (60 * index).ms,
+                                  duration: 240.ms,
+                                )
+                                .slideY(
+                                  begin: 0.08,
+                                  end: 0,
+                                  curve: Curves.easeOut,
+                                );
+                          }, childCount: visibleRequests.length),
                         ),
-                        itemCount: _requests.length,
-                        itemBuilder: (context, index) {
-                          return _buildRequestItem(_requests[index])
-                              .animate()
-                              .fadeIn(delay: (60 * index).ms, duration: 240.ms)
-                              .slideY(
-                                begin: 0.08,
-                                end: 0,
-                                curve: Curves.easeOut,
-                              );
-                        },
                       ),
+                  ],
+                ),
                 _buildPullToRefreshIndicator(),
               ],
             ),
+    );
+  }
+
+  Widget _buildStatsHeader() {
+    final int pendingCount = _requests
+        .where((r) => r.status.toLowerCase() == 'pending')
+        .length;
+    final int seenCount = _requests
+        .where((r) => r.status.toLowerCase() == 'seen')
+        .length;
+    final int inProgressCount = _requests
+        .where((r) => r.status.toLowerCase() == 'in_progress')
+        .length;
+    final int completedCount = _requests
+        .where((r) => r.status.toLowerCase() == 'completed')
+        .length;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 18),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatTile(
+              AppColors.warning,
+              pendingCount,
+              AppStrings.tr('request_status_pending'),
+              'pending',
+            ),
+          ),
+          _buildStatDivider(),
+          Expanded(
+            child: _buildStatTile(
+              AppColors.info,
+              seenCount,
+              AppStrings.tr('request_status_seen'),
+              'seen',
+            ),
+          ),
+          _buildStatDivider(),
+          Expanded(
+            child: _buildStatTile(
+              Colors.purple,
+              inProgressCount,
+              AppStrings.tr('request_status_in_progress'),
+              'in_progress',
+            ),
+          ),
+          _buildStatDivider(),
+          Expanded(
+            child: _buildStatTile(
+              AppColors.success,
+              completedCount,
+              AppStrings.tr('request_status_completed'),
+              'completed',
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05, end: 0);
+  }
+
+  Widget _buildStatTile(Color color, int count, String label, String status) {
+    final bool isSelected = _statusFilter == status;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        setState(() => _statusFilter = isSelected ? null : status);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 5),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: 3,
+              width: isSelected ? 22 : 0,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatDivider() {
+    return Container(
+      width: 1,
+      height: 40,
+      color: Theme.of(context).dividerColor.withOpacity(0.15),
     );
   }
 

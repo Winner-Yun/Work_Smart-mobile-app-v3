@@ -488,6 +488,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       selected: selected,
       onSelected: (_) => onSelected(value),
       selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+      checkmarkColor: Theme.of(context).colorScheme.primary,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       labelStyle: TextStyle(
         color: selected
@@ -948,7 +949,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Theme.of(context).textTheme.bodyLarge?.color,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
@@ -1055,7 +1056,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: Text(
           title,
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w200,
             fontSize: 15,
             color: Theme.of(context).textTheme.bodyLarge?.color,
           ),
@@ -1093,7 +1094,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       title: Text(
         AppStrings.tr('language_label'),
         style: TextStyle(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w200,
           fontSize: 15,
           color: Theme.of(context).textTheme.bodyLarge?.color,
         ),
@@ -1167,7 +1168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w200,
             fontSize: 15,
             color: labelColor ?? Theme.of(context).textTheme.bodyLarge?.color,
           ),

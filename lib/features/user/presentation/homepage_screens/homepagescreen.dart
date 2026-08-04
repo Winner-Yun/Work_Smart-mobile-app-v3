@@ -424,8 +424,8 @@ class _HomePageScreenState extends HomePageLogic {
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Theme.of(context).colorScheme.primary,
-          width: 3,
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+          width: 2,
         ),
         boxShadow: [
           BoxShadow(
