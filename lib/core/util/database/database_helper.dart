@@ -19,8 +19,7 @@ class DatabaseHelper {
   /// =========================
   Future<Database?> get database async {
     if (kIsWeb) return null; // Web does not use SQLite
-    // Close and reopen if the database was cached from a previous version
-    // to ensure migrations run when the version is bumped.
+    // Reopen if the cached handle is from an older schema version.
     if (_database != null) {
       final currentVersion = await _database!.getVersion();
       if (currentVersion < 10) {
@@ -175,9 +174,7 @@ class DatabaseHelper {
           }
         }
 
-        // New V10 migration: face update history/audit trail (backup of the
-        // previous embedding, cooldown timestamp, update counter) plus a
-        // dedicated audit log table for the "Update Face" security feature.
+        // New V10 migration: face update history/audit trail columns + log table.
         if (oldVersion < 10) {
           for (final String statement in const [
             'ALTER TABLE face_embedding_cache ADD COLUMN previous_embedding_data TEXT',
@@ -374,9 +371,7 @@ class DatabaseHelper {
   /// USER PROFILE CACHE
   /// =========================
 
-  /// Saves the user profile data to local storage (SQLite on mobile,
-  /// SharedPreferences on web) so it can be loaded without a network
-  /// request on subsequent app starts.
+  /// Caches the user profile locally so it loads without a network request on startup.
   Future<void> saveUserProfile(Map<String, dynamic> profileData) async {
     final userId =
         profileData['_id']?.toString() ??
@@ -401,8 +396,7 @@ class DatabaseHelper {
     }
   }
 
-  /// Retrieves the cached user profile data from local storage.
-  /// Returns null if no cached data exists.
+  /// Returns the cached user profile, or null if none exists.
   Future<Map<String, dynamic>?> getUserProfile() async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -445,9 +439,7 @@ class DatabaseHelper {
   /// POLICY CACHE
   /// =========================
 
-  /// Saves the workspace policy to local storage (SQLite on mobile,
-  /// SharedPreferences on web) so it can be loaded without a network
-  /// request on subsequent app starts.
+  /// Caches the workspace policy locally so it loads without a network request on startup.
   Future<void> saveCachedPolicy(
     String workspaceId,
     Map<String, dynamic> policyData,
@@ -468,8 +460,7 @@ class DatabaseHelper {
     }
   }
 
-  /// Retrieves the cached policy for [workspaceId] from local storage.
-  /// Returns null if no cached data exists.
+  /// Returns the cached policy for [workspaceId], or null if none exists.
   Future<Map<String, dynamic>?> getCachedPolicy(String workspaceId) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -627,12 +618,8 @@ class DatabaseHelper {
     return null;
   }
 
-  /// Saves a new face embedding while preserving the previous one as a
-  /// backup and recording an audit trail entry — used by the "Update Face"
-  /// flow so a re-registration never silently overwrites the old embedding
-  /// without history. First-time registration (no prior embedding cached)
-  /// is stored normally with no cooldown/audit entry, since there is
-  /// nothing to update yet.
+  /// Saves a new face embedding, keeping the previous one as backup and
+  /// logging an audit entry. First-time registration skips the audit/cooldown.
   Future<void> saveFaceEmbeddingWithHistory(
     String userId,
     Map<String, dynamic> newEmbeddingData, {
@@ -645,10 +632,7 @@ class DatabaseHelper {
       final prefs = await SharedPreferences.getInstance();
       final String? previousJson = prefs.getString('face_embedding_$userId');
       if (previousJson != null) {
-        await prefs.setString(
-          'face_embedding_previous_$userId',
-          previousJson,
-        );
+        await prefs.setString('face_embedding_previous_$userId', previousJson);
         await prefs.setInt('face_last_update_$userId', nowUtcMs);
         await prefs.setInt(
           'face_update_count_$userId',
@@ -699,17 +683,17 @@ class DatabaseHelper {
       final decoded = jsonDecode(embeddingJson);
       if (decoded is Map) {
         final vector =
-            decoded['face_embeddings'] ?? decoded['embeddings'] ?? decoded['vector'];
+            decoded['face_embeddings'] ??
+            decoded['embeddings'] ??
+            decoded['vector'];
         if (vector is List) return vector.length;
       }
     } catch (_) {}
     return null;
   }
 
-  /// Checks whether [userId] is allowed to update their face embedding now,
-  /// enforcing a cooldown (default 30 days) since the last successful
-  /// update. Comparisons are always done in UTC to avoid device timezone
-  /// drift affecting the cooldown window.
+  /// Checks whether [userId] can update their face embedding, enforcing a
+  /// cooldown (default 30 days) since the last update, compared in UTC.
   Future<FaceUpdateEligibility> getFaceUpdateEligibility(
     String userId, {
     Duration cooldown = const Duration(days: 30),
@@ -770,16 +754,38 @@ class DatabaseHelper {
     }
   }
 
-  /// Wipes every locally cached artifact tied to the signed-in user (session
-  /// tokens, cached profile, face embeddings, workspace/geofence/policy
-  /// caches) so a later login on this device — by the same or a different
-  /// user — never sees stale data. Deliberately leaves device-level settings
-  /// (e.g. language) untouched.
+  /// Every per-screen cache key prefix, so a workspace switch/logout can sweep them all.
+  static const List<String> _workspaceScopedCachePrefixes = [
+    'cached_homepage_geofence_',
+    'cached_tasks_',
+    'cached_requests_',
+    'cached_attendance_stats_',
+    'cached_attendance_calendar_',
+    'cached_leaves_',
+    'cached_leave_all_requests_',
+  ];
+
+  /// Clears every per-workspace cache without touching the session or workspace list.
+  Future<void> clearWorkspaceScopedCaches() async {
+    await clearPolicyCache();
+
+    final prefs = await SharedPreferences.getInstance();
+    final keysToRemove = prefs
+        .getKeys()
+        .where((key) => _workspaceScopedCachePrefixes.any(key.startsWith))
+        .toList();
+    for (final key in keysToRemove) {
+      await prefs.remove(key);
+    }
+  }
+
+  /// Wipes all locally cached user data (session, profile, face, workspace
+  /// caches) so the next login never sees stale data. Leaves device settings alone.
   Future<void> clearAllUserData() async {
     await clearCachedLogin();
     await clearUserProfile();
     await clearFaceEmbeddingCache();
-    await clearPolicyCache();
+    await clearWorkspaceScopedCaches();
 
     final prefs = await SharedPreferences.getInstance();
     const workspaceScopedKeys = [
@@ -794,22 +800,10 @@ class DatabaseHelper {
     for (final key in workspaceScopedKeys) {
       await prefs.remove(key);
     }
-
-    // Geofence is now cached per workspace (`cached_homepage_geofence_<id>`)
-    // so it doesn't leak a previous workspace's geofence into a newly
-    // selected one — sweep every such key rather than one fixed name.
-    final geofenceKeys = prefs
-        .getKeys()
-        .where((key) => key.startsWith('cached_homepage_geofence_'));
-    for (final key in geofenceKeys) {
-      await prefs.remove(key);
-    }
   }
 }
 
-/// Result of a face-update cooldown check (see
-/// [DatabaseHelper.getFaceUpdateEligibility]). Timestamps are always UTC;
-/// convert with `.toLocal()` only when displaying to the user.
+/// Result of [DatabaseHelper.getFaceUpdateEligibility]. Timestamps are UTC.
 class FaceUpdateEligibility {
   final bool allowed;
   final DateTime? lastUpdateAtUtc;

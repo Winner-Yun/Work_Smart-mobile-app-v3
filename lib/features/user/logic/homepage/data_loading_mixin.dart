@@ -118,6 +118,19 @@ mixin _DataLoadingMixin
           'deadlineScanMinutes',
         ]);
     deadlineScanMinutes = _parseNonNegativeInt(rawDeadlineScanMinutes);
+
+    final dynamic rawRequiresCheckOut =
+        _readByKeys(policy, const [
+          'requires_check_out',
+          'requiresCheckOut',
+        ]) ??
+        _readByKeys(_officeConfigData, const [
+          'requires_check_out',
+          'requiresCheckOut',
+        ]);
+    requiresCheckOut = rawRequiresCheckOut is bool
+        ? rawRequiresCheckOut
+        : (rawRequiresCheckOut?.toString().toLowerCase() != 'false');
     await _loadFaceEmbeddingData();
     _syncScanStateFromAttendanceData();
   }
@@ -159,11 +172,7 @@ mixin _DataLoadingMixin
         }
       }
 
-      // Scoped per workspace (like the policy cache below) — otherwise
-      // switching to a workspace that has no geofence cached of its own
-      // would silently pick up whichever *other* workspace's geofence
-      // happened to be sitting under this key last, instead of showing
-      // "no geofence yet" until the background fetch resolves the real one.
+      // Scoped per workspace so switching workspaces never inherits another one's geofence.
       if (selectedId != null && selectedId.isNotEmpty) {
         final cachedGeofenceJson = prefs.getString(
           'cached_homepage_geofence_$selectedId',
@@ -191,14 +200,8 @@ mixin _DataLoadingMixin
     }
   }
 
-  // Pure data fetch — no isRefreshing/isInitialDataLoading side effects.
-  // Every caller controls the loading flag around its *whole* sequence of
-  // awaited calls (see onRefresh/_loadAllData below); this used to flip
-  // isRefreshing off in its own `finally` block as soon as *it* finished,
-  // which hid the skeleton loader while callers still had more awaits left
-  // (e.g. onRefresh's _loadData/_fetchMyAttendance/setupOfficeMapObjects),
-  // so the UI would flash partially-loaded content before the refresh
-  // actually completed.
+  // Pure data fetch, no loading-flag side effects — callers control the flag
+  // around their whole await sequence so the skeleton doesn't hide too early.
   Future<void> _fetchWorkspaceGeofenceAndPolicy() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -273,14 +276,12 @@ mixin _DataLoadingMixin
             'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
             'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
             'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+            'requires_check_out': fetchedPolicy.requiresCheckOut,
             'status': fetchedPolicy.status,
           };
           _officeConfigData['policy'] = policyMap;
 
-          // Skip the write entirely when the fetched policy is byte-for-byte
-          // identical to what's already cached — this runs on every
-          // homepage load and every pull-to-refresh, so writing unchanged
-          // data each time is a wasted disk write for no benefit.
+          // Skip the write when the fetched policy matches what's already cached.
           final cachedPolicyMap = await DatabaseHelper().getCachedPolicy(
             selectedWorkspaceId,
           );
@@ -301,9 +302,7 @@ mixin _DataLoadingMixin
   }
 
   Future<void> onRefresh() async {
-    // Manual refresh swaps the whole page for the same skeleton loader used
-    // on initial load (see homepagescreen.dart's build, gated on
-    // isManualRefreshing) instead of a modal dialog over stale content.
+    // Manual refresh reuses the same skeleton loader as initial load, not a modal dialog.
     if (!mounted) return;
 
     setState(() {
@@ -320,9 +319,7 @@ mixin _DataLoadingMixin
     } catch (e) {
       debugPrint('[onRefresh] Error: $e');
     } finally {
-      // Must always clear both flags, even on failure — _onScroll only
-      // allows another pull-to-refresh while isRefreshing is false, so
-      // leaving either set here permanently locks the homepage.
+      // Must clear both flags even on failure, or pull-to-refresh locks up permanently.
       if (mounted) {
         setState(() {
           isRefreshing = false;
@@ -333,18 +330,12 @@ mixin _DataLoadingMixin
   }
 
   Future<void> _loadAllData() async {
-    // Profile is read from local cache only here — no network round trip.
-    // The network fetch+save (_fetchAndSaveUserProfile) only runs on
-    // explicit pull-to-refresh (see onRefresh below); profile edits already
-    // save to local DB immediately (profile_screens.dart), so the next
-    // homepage load just picks up the cached copy. Without this, every tab
-    // switch back to Home recreated HomePageLogic's state and re-fetched the
-    // profile from the server, adding a network round trip to every visit.
+    // Profile here is cache-only (no network) — the fetch+save runs on pull-to-refresh,
+    // since profile edits already save locally, so every tab visit avoids a round trip.
     await _loadLocalWorkspaceAndConfig();
     await _loadData();
 
-    // Keep the skeleton up briefly even though the local load was fast, so
-    // loading doesn't read as a jarring instant pop-in.
+    // Keep the skeleton up briefly so a fast local load doesn't pop in jarringly.
     await Future.delayed(AppDurations.minSkeletonDisplay);
     if (!mounted) return;
 
@@ -352,15 +343,9 @@ mixin _DataLoadingMixin
       isInitialDataLoading = false;
     });
 
-    // Background refinement pass (server-sourced profile/workspace/geofence/
-    // policy, re-applied attendance, map objects). Re-fetching the profile
-    // here (same as onRefresh) means a name/avatar change made elsewhere
-    // (e.g. another device, or an admin edit) shows up on the next homepage
-    // visit without the user needing to pull-to-refresh manually.
-    // isRefreshing must always get cleared here even on failure —
-    // _onScroll only allows a pull-to-refresh while isRefreshing is false,
-    // so an uncaught error here would otherwise permanently disable
-    // pull-to-refresh from the very first homepage load.
+    // Background refinement pass so changes made elsewhere (another device, admin
+    // edit) show up without a manual pull-to-refresh. Must clear isRefreshing even
+    // on failure, or pull-to-refresh stays disabled from the first load onward.
     if (mounted) {
       setState(() {
         isRefreshing = true;
@@ -386,10 +371,8 @@ mixin _DataLoadingMixin
     }
   }
 
-  /// Public entry point for callers outside this library (e.g. the homepage
-  /// screen after a face scan returns) to re-sync attendance from the
-  /// backend in place, without navigating away. Shows the same skeleton
-  /// loader used by pull-to-refresh while the request is in flight.
+  /// Re-syncs attendance from the backend in place (e.g. after a face scan
+  /// returns), using the same skeleton loader as pull-to-refresh.
   Future<void> refreshAttendanceFromServer() async {
     if (mounted) {
       setState(() {
@@ -406,12 +389,8 @@ mixin _DataLoadingMixin
     }
   }
 
-  /// Pulls the current user's *today* attendance for the active workspace
-  /// from the backend and replaces the shared in-memory `attendanceRecords`
-  /// list that `currentAttendance` (see attendance_scan_mixin.dart) reads
-  /// from. Scoped to today via `date_filter=today` so the homepage doesn't
-  /// have to page through the user's whole history just to know whether
-  /// they've checked in/out today.
+  /// Pulls today's attendance for the active workspace and replaces the shared
+  /// in-memory `attendanceRecords` list, scoped to today so it skips paging history.
   Future<void> _fetchMyAttendance() async {
     final String? workspaceId = currentWorkspace?.id;
     if (workspaceId == null || workspaceId.isEmpty) return;

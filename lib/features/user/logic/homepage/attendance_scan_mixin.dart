@@ -54,6 +54,23 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
     final bool checkInDone = _isTypeCompleted('check_in');
     final bool checkOutDone = _isTypeCompleted('check_out');
 
+    // Policies with no check-out step complete attendance at check-in —
+    // never advance to the check_out scan type.
+    if (!requiresCheckOut) {
+      _stopCheckOutCooldown();
+      selectedAttendanceScanType = 'check_in';
+      if (checkInDone) {
+        hasMockScanSuccess = true;
+        lastMockScanType = 'check_in';
+        lastMockScanAt = _getCompletedTypeTime('check_in');
+      } else {
+        hasMockScanSuccess = false;
+        lastMockScanAt = null;
+      }
+      _syncDeadlineRefreshWatcher();
+      return;
+    }
+
     if (checkOutDone) {
       _stopCheckOutCooldown();
       selectedAttendanceScanType = 'check_out';
@@ -86,6 +103,7 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
 
   void selectAttendanceScanType(String type) {
     if (type != 'check_in' && type != 'check_out') return;
+    if (type == 'check_out' && !requiresCheckOut) return;
 
     if (type == 'check_out' && !_isTypeCompleted('check_in')) {
       showDialog<void>(
@@ -165,11 +183,17 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
       selectedAttendanceScanType == 'check_out' && checkOutCooldownSeconds > 0;
 
   bool get isCheckOutScanDeadlineReached {
-    if (selectedAttendanceScanType != 'check_out') {
-      return false;
-    }
-    if (!_isTypeCompleted('check_in') || _isTypeCompleted('check_out')) {
-      return false;
+    if (!requiresCheckOut) {
+      if (_isTypeCompleted('check_in')) {
+        return false;
+      }
+    } else {
+      if (selectedAttendanceScanType != 'check_out') {
+        return false;
+      }
+      if (!_isTypeCompleted('check_in') || _isTypeCompleted('check_out')) {
+        return false;
+      }
     }
 
     final DateTime? deadlineAt = _getCheckOutScanDeadlineTime();
@@ -181,7 +205,8 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
   }
 
   bool get isAttendanceScanBlockedByDeadline {
-    if (_isTypeCompleted('check_out')) {
+    final String completionType = requiresCheckOut ? 'check_out' : 'check_in';
+    if (_isTypeCompleted(completionType)) {
       return false;
     }
 
@@ -352,13 +377,17 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
     _startCheckOutCooldown(initialSeconds: remainingSeconds);
   }
 
+  // "Check-in only" policies have no check-out time, so the deadline falls back
+  // to the check-in window's own deadline.
   DateTime? _getCheckOutScanDeadlineTime() {
-    final DateTime? checkOutEnd = _parse12hTime(officeCheckOutTime);
-    if (checkOutEnd == null || deadlineScanMinutes <= 0) {
+    final DateTime? windowStart = _parse12hTime(
+      requiresCheckOut ? officeCheckOutTime : officeCheckInTime,
+    );
+    if (windowStart == null || deadlineScanMinutes <= 0) {
       return null;
     }
 
-    return checkOutEnd.add(Duration(minutes: deadlineScanMinutes));
+    return windowStart.add(Duration(minutes: deadlineScanMinutes));
   }
 
   void _syncDeadlineRefreshWatcher() {
@@ -513,6 +542,7 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
         attendanceScanSuccessAt[scannedType] = lastMockScanAt;
 
         if (scannedType == 'check_in' &&
+            requiresCheckOut &&
             !(attendanceScanStatus['check_out'] ?? false)) {
           selectedAttendanceScanType = 'check_out';
           hasMockScanSuccess = false;

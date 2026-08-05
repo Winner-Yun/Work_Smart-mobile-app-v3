@@ -48,10 +48,8 @@ part 'homepage/permission_flow_mixin.dart';
 
 enum _PermissionResolutionAction { retry, settings, notNow }
 
-// Holds all shared state so the concern mixins below (each `on
-// _HomePageLogicState`) can be composed onto HomePageLogic without creating a
-// circular constraint (a mixin can't be constrained on the very class that
-// mixes it in).
+// Holds shared state so the concern mixins below can compose onto HomePageLogic
+// without a mixin being constrained on the very class it mixes into.
 abstract class _HomePageLogicState extends State<HomePageScreen> {
   String get _userLocationMarkerTitle => AppStrings.tr('map_marker_me');
 
@@ -62,22 +60,24 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
 
   late final WorkspaceRepository _workspaceRepo;
 
-  late final FaceRepository _faceRepo; // Add Face Repo
+  late final FaceRepository _faceRepo;
 
   late final AttendanceRepository _attendanceRepo;
 
-  // Whether a usable face embedding is present in local storage. Always set
-  // by directly re-reading DatabaseHelper (see _loadFaceEmbeddingData) —
-  // never trust a stale in-memory copy of the embedding data itself.
+  // Always set by re-reading DatabaseHelper directly — never trust a stale in-memory copy.
   bool hasLocalFaceEmbedding = false;
 
-  bool isFaceEmbeddingUpdating = false; // Add Update State
+  bool isFaceEmbeddingUpdating = false;
 
   Workspace? currentWorkspace;
 
   GeofenceModel? currentGeofence;
 
   PolicyModel? currentPolicy;
+
+  // Gates the scan card until real geofence/policy data arrives, so it never
+  // checks the user in/out against fallback defaults right after a workspace switch.
+  bool get isWorkspaceSetupReady => currentGeofence != null && currentPolicy != null;
 
   bool isRefreshing = false;
 
@@ -123,13 +123,13 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
 
   late int deadlineScanMinutes;
 
+  late bool requiresCheckOut;
+
   // --- UI State Tracking ---
   bool isInitialDataLoading = true;
 
-  // Set only by the manual pull-to-refresh gesture (onRefresh) — separate
-  // from `isRefreshing`, which is also flipped by the silent background
-  // refresh in `_loadAllData`/`refreshAttendanceFromServer` and must never
-  // trigger the skeleton (that would defeat the cache-first pattern).
+  // Only the manual pull-to-refresh sets this — unlike `isRefreshing`, it must
+  // never trigger the skeleton loader.
   bool isManualRefreshing = false;
 
   bool isInRange = false;

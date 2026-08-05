@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/app/routes/app_route.dart';
@@ -7,13 +8,8 @@ import 'package:flutter_worksmart_app/features/user/repository/task_repository.d
 import 'package:flutter_worksmart_app/features/user/service/task_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// App-wide pending-task count, shared by every [TaskIconButton] instance.
-///
-/// Each screen creates its own `TaskIconButton`, so a plain per-widget count
-/// only ever refreshed on that one instance's initState/return-from-task-page.
-/// Routing the count through this singleton means an update triggered from
-/// any screen (or the periodic poll below) is reflected on every badge,
-/// regardless of which screen is currently visible.
+/// App-wide pending-task count, shared by every [TaskIconButton] instance so
+/// an update from any screen is reflected on every badge.
 class _TaskBadgeController {
   _TaskBadgeController._internal();
   static final _TaskBadgeController instance = _TaskBadgeController._internal();
@@ -41,6 +37,7 @@ class _TaskBadgeController {
     }
   }
 
+  // Also warms TaskScreen's own cache (same key), so tapping the icon renders instantly.
   Future<void> refresh() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -50,20 +47,23 @@ class _TaskBadgeController {
         return;
       }
 
-      final tasks = await _taskRepo.getWorkspaceTasks(
-        workspaceId,
-        status: 'pending',
+      final tasks = await _taskRepo.getWorkspaceTasks(workspaceId);
+      pendingCount.value = tasks.where((t) => t.status == 'pending').length;
+
+      final sorted = tasks.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      await prefs.setString(
+        'cached_tasks_$workspaceId',
+        jsonEncode(sorted.map((t) => t.toJson()).toList()),
       );
-      pendingCount.value = tasks.length;
     } catch (_) {
       // Best-effort badge only — a failed count fetch shouldn't be noisy.
     }
   }
 }
 
-/// Task icon shown in the app bar of every main tab, opening [TaskScreen],
-/// with a small badge showing how many tasks are pending. The count is kept
-/// live across the whole app (not just this button) via [_TaskBadgeController].
+/// Task icon shown in every main tab's app bar, with a pending-task count badge
+/// kept live app-wide via [_TaskBadgeController].
 class TaskIconButton extends StatefulWidget {
   final Map<String, dynamic>? loginData;
   final Color? iconColor;
@@ -100,8 +100,13 @@ class _TaskIconButtonState extends State<TaskIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final Color ringColor =
+        Theme.of(context).appBarTheme.backgroundColor ??
+        Theme.of(context).scaffoldBackgroundColor;
+
     return Stack(
       alignment: Alignment.center,
+      clipBehavior: Clip.none,
       children: [
         IconButton(
           tooltip: AppStrings.tr('task_menu'),
@@ -109,18 +114,22 @@ class _TaskIconButtonState extends State<TaskIconButton> {
           icon: Icon(Icons.assessment_outlined, color: widget.iconColor),
         ),
         Positioned(
-          top: 8,
-          right: 8,
+          top: 6,
+          right: 6,
           child: ValueListenableBuilder<int>(
             valueListenable: _controller.pendingCount,
             builder: (context, pendingCount, _) {
               if (pendingCount <= 0) return const SizedBox.shrink();
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                decoration: const BoxDecoration(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 5,
+                  vertical: 2,
+                ),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                decoration: BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
+                  border: Border.all(color: ringColor, width: 1.5),
                 ),
                 child: Text(
                   pendingCount > 9 ? '9+' : '$pendingCount',

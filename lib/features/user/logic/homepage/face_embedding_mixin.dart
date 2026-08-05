@@ -1,14 +1,8 @@
 part of '../homepage_logic.dart';
 
 mixin _FaceEmbeddingMixin on _HomePageLogicState {
-  /// Checks local storage for a usable face embedding first. If nothing
-  /// usable is cached yet (fresh install, cleared app data, new device —
-  /// but the server already has an approved embedding), falls back to
-  /// fetching it from the server and saving it locally so this doesn't need
-  /// a network round trip on every future load. Runs on both the initial
-  /// homepage load and pull-to-refresh (see `_loadData` in
-  /// data_loading_mixin.dart), so a missing local copy gets backfilled
-  /// either way.
+  /// Checks local storage for a usable face embedding first, falling back to
+  /// fetching from the server and caching it if nothing usable is cached yet.
   Future<void> _loadFaceEmbeddingData() async {
     if (loggedInUserId == null) {
       debugPrint('[FaceEmbedding] Skipped load: loggedInUserId is null');
@@ -31,9 +25,7 @@ mixin _FaceEmbeddingMixin on _HomePageLogicState {
         return;
       }
 
-      // Nothing usable locally — pull it from the repository. Trust its
-      // own success/failure result instead of re-reading the DB entry we
-      // just asked it to write.
+      // Nothing usable locally — pull from the repository and trust its result.
       debugPrint(
         '[FaceEmbedding] No usable local embedding, fetching from server for user=$loggedInUserId',
       );
@@ -47,9 +39,7 @@ mixin _FaceEmbeddingMixin on _HomePageLogicState {
     }
   }
 
-  /// Fetches the face embedding from [FaceRepository.getMyFaceEmbeddings]
-  /// and saves it locally. Returns whether a usable embedding was fetched
-  /// and saved.
+  /// Fetches the face embedding from the server and saves it locally.
   Future<bool> _fetchAndSaveFaceEmbedding() async {
     if (loggedInUserId == null) return false;
 

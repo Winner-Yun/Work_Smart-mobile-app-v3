@@ -145,8 +145,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1, end: 0);
   }
 
-  // Display-only card (no tap/ripple) — for reading contact info, not
-  // triggering an action.
+  // Display-only card (no tap/ripple) — for reading contact info, not triggering an action.
   Widget _buildSupportCard(
     BuildContext context, {
     required IconData icon,

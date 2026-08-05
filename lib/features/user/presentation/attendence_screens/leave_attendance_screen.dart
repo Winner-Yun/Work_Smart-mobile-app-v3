@@ -86,8 +86,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     }
   }
 
-  // Cache-first; a true cold start still waits on the network since
-  // there's nothing meaningful to show otherwise.
+  // Cache-first; a cold start still waits on the network since there's nothing to show otherwise.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -264,6 +263,7 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
         'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
         'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
         'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+        'requires_check_out': fetchedPolicy.requiresCheckOut,
         'status': fetchedPolicy.status,
       };
 

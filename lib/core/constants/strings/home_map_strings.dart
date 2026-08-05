@@ -69,6 +69,12 @@ const Map<String, String> homeMapStringsEn = {
   'members': 'Members',
   'zone': 'Scan Radius',
   'switch': 'Switch',
+  'workspace_setup_loading_title': 'Setting Up Workspace',
+  'workspace_setup_loading_desc':
+      'Loading office location and attendance policy. Scanning unlocks once this finishes.',
+  'confirm_switch_workspace_title': 'Switch Workspace?',
+  'confirm_switch_workspace_msg':
+      'You\'ll leave this workspace and need to pick another one before you can check in again.',
 };
 
 const Map<String, String> homeMapStringsKm = {
@@ -142,4 +148,10 @@ const Map<String, String> homeMapStringsKm = {
   'members': 'សមាជិក',
   'zone': 'Scan Radius',
   'switch': 'ប្តូរ',
+  'workspace_setup_loading_title': 'កំពុងរៀបចំកន្លែងធ្វើការ',
+  'workspace_setup_loading_desc':
+      'កំពុងផ្ទុកទីតាំងការិយាល័យ និងគោលការណ៍វត្តមាន។ ការស្កេននឹងអាចប្រើបានពេលរួចរាល់។',
+  'confirm_switch_workspace_title': 'ប្តូរកន្លែងធ្វើការ?',
+  'confirm_switch_workspace_msg':
+      'អ្នកនឹងចាកចេញពីកន្លែងធ្វើការនេះ ហើយត្រូវជ្រើសរើសកន្លែងធ្វើការផ្សេងទៀត មុននឹងអាចចុះវត្តមានបានម្តងទៀត។',
 };

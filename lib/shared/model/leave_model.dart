@@ -25,10 +25,8 @@ class LeaveModel {
 
   int get durationInDays => endDate.difference(startDate).inDays + 1;
 
-  // The backend returns MongoDB extended JSON: object ids come as
-  // `{"$oid": "..."}` and datetimes as `{"$date": "..."}` rather than plain
-  // strings, so every field is unwrapped defensively instead of assuming a
-  // single fixed shape.
+  // Backend sends MongoDB extended JSON (`{"$oid": ...}`, `{"$date": ...}`), so
+  // every field is unwrapped defensively instead of assuming plain strings.
   factory LeaveModel.fromJson(Map<String, dynamic> json) {
     return LeaveModel(
       id: _extractObjectId(json['id'] ?? json['_id']),
@@ -65,9 +63,7 @@ class LeaveModel {
     return null;
   }
 
-  /// Reads a datetime-ish field, unwrapping MongoDB extended JSON
-  /// (`{"$date": "..."}`) if present; otherwise treats the value as an
-  /// already-plain ISO string.
+  /// Reads a datetime field, unwrapping MongoDB extended JSON if present.
   static DateTime? _readDate(Map<String, dynamic> json, List<String> keys) {
     for (final key in keys) {
       final value = json[key];
@@ -84,8 +80,7 @@ class LeaveModel {
     return null;
   }
 
-  /// Unwraps a MongoDB extended-JSON object id (`{"$oid": "..."}`), or
-  /// returns the value as-is if it's already a plain string.
+  /// Unwraps a MongoDB extended-JSON object id, or returns a plain string as-is.
   static String _extractObjectId(dynamic value) {
     if (value == null) return '';
     if (value is Map) {
@@ -94,8 +89,7 @@ class LeaveModel {
     return value.toString();
   }
 
-  // Plain (non-MongoDB-extended-JSON) shape — round-trips through
-  // fromJson, which accepts plain strings as well as the $oid/$date form.
+  // Plain shape that round-trips through fromJson (which also accepts $oid/$date form).
   Map<String, dynamic> toJson() => {
     'id': id,
     'workspace_id': workspaceId,

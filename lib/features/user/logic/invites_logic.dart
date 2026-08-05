@@ -11,9 +11,7 @@ import 'package:flutter_worksmart_app/features/user/presentation/homepage_screen
 import 'package:flutter_worksmart_app/shared/model/invite_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Paginated workspace-invite list with search filtering and accept/reject
-/// actions. Adapted from the old Firestore-notifications screen's invite
-/// tab, now driven entirely by the REST `InviteRepository`.
+/// Paginated workspace-invite list with search filtering and accept/reject actions.
 abstract class InvitesLogic extends State<InvitesScreen> {
   final InviteRepository _inviteRepo = InviteRepository(InviteService());
   final ScrollController scrollController = ScrollController();
@@ -30,9 +28,7 @@ abstract class InvitesLogic extends State<InvitesScreen> {
   final Set<String> actionLoadingIds = <String>{};
   bool _isReloadingOnScrollUp = false;
 
-  // Invites aren't workspace-scoped (`getMyInvites` takes only page/limit),
-  // so a single global key is enough. Only the first page is cached — the
-  // rest of the pagination flow is untouched.
+  // Invites aren't workspace-scoped, so one global key covers the cached first page.
   static const String _cacheKeyInvitesPage1 = 'cached_invites_page1';
 
   @override
@@ -47,25 +43,21 @@ abstract class InvitesLogic extends State<InvitesScreen> {
     });
   }
 
-  /// Local-first init: show cached page-1 invites immediately (no blocking
-  /// skeleton), then silently refresh from the network in the background.
-  /// A true cold start (no cache) falls back to the blocking fetch.
+  /// Local-first init: show cached page-1 invites instantly, then refresh
+  /// in the background; falls back to a blocking fetch on a cold start.
   Future<void> _initInvites() async {
     final List<Invite> cached = await _loadCachedInvites();
 
     if (!mounted) return;
 
     if (cached.isNotEmpty) {
-      // Keep the loading state up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Keep the loading state up briefly so an instant cache read doesn't pop in jarringly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
       setState(() {
         invites = cached;
         _currentPage = 1;
-        // Total is unknown until the background refresh lands; keep
-        // pagination disabled until then so we don't fetch a wrong "next"
-        // page against a total we haven't verified yet.
+        // Pagination stays disabled until the background refresh confirms the real total.
         _totalInvites = cached.length;
         hasMore = false;
         isLoading = false;
@@ -136,14 +128,8 @@ abstract class InvitesLogic extends State<InvitesScreen> {
     }
   }
 
-  /// Fetches page 1 of invites.
-  ///
-  /// - `isRefresh` resets pagination back to page 1 (used for pull-to-refresh
-  ///   and reloads after accept/reject/cold-start).
-  /// - `silent` runs the fetch without the blocking skeleton (`isLoading`),
-  ///   and only touches state/cache if the fetched page actually differs
-  ///   from what's already shown — used for the background refresh that
-  ///   follows a cache-first initial load.
+  /// Fetches page 1 of invites. `isRefresh` resets to page 1; `silent` skips
+  /// the blocking skeleton and only updates state if the page actually changed.
   Future<void> fetchInvites({bool isRefresh = false, bool silent = false}) async {
     if (isRefresh && !silent) {
       setState(() {

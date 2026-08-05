@@ -44,9 +44,8 @@ class AttendanceRepository {
     return AttendanceModel.fromJson(json);
   }
 
-  /// The current user's attendance records for [workspaceId]. Tolerates the
-  /// backend returning either a single record or a paginated list under a
-  /// wrapper key (`data`/`records`/`attendance`/`items`/`results`).
+  /// The current user's attendance records for [workspaceId]. Tolerates a plain
+  /// list or a paginated wrapper under `data`/`records`/`attendance`/`items`/`results`.
   Future<List<AttendanceModel>> getMyAttendance(
     String workspaceId, {
     int? page,
@@ -98,9 +97,7 @@ class AttendanceRepository {
     return <AttendanceModel>[];
   }
 
-  /// A single record representing "today" for the current user, merging
-  /// multiple rows for the same day (in case the backend logs check-in and
-  /// check-out as separate entries rather than one row with both times).
+  /// A single "today" record, merging separate check-in/check-out rows if the backend logs them that way.
   Future<AttendanceModel?> getTodayAttendance(String workspaceId) async {
     final records = await getMyAttendance(
       workspaceId,

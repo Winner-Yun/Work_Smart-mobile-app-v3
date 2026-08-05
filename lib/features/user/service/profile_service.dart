@@ -21,7 +21,6 @@ class ProfileService {
         ),
       });
 
-      // Execute PATCH request using ApiClient (token is attached automatically)[cite: 1]
       final Response response = await _apiClient.patch(
         endpoint,
         data: formData,

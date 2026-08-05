@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter_worksmart_app/config/env.dart';
 import 'package:flutter_worksmart_app/features/user/repository/config_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/config_service.dart';
 import 'package:http/http.dart' as http;
@@ -30,31 +29,13 @@ class CloudinaryProfileImageService {
   CloudinaryProfileImageService({ConfigRepository? configRepo})
     : _configRepo = configRepo ?? ConfigRepository(ConfigService());
 
-  /// `cdn_api_key`/`cdn_api_secret` are never cached on-device (see
-  /// AuthLogic._fetchAndCacheAppConfig), so every upload/delete re-fetches
-  /// `/config/data` live. Falls back to `.env` (if present) only if that
-  /// live fetch itself fails, so uploads degrade gracefully instead of
-  /// hard-failing when the backend is briefly unreachable.
+  /// Credentials are never cached on-device, so this re-fetches `/config/data` live.
   Future<_CloudinaryCredentials> _resolveCredentials() async {
-    try {
-      final config = await _configRepo.getConfig();
-      if (config.cdnCloudName.isNotEmpty &&
-          config.cdnApiKey.isNotEmpty &&
-          config.cdnApiSecret.isNotEmpty) {
-        return _CloudinaryCredentials(
-          cloudName: config.cdnCloudName.trim(),
-          apiKey: config.cdnApiKey.trim(),
-          apiSecret: config.cdnApiSecret.trim(),
-        );
-      }
-    } catch (_) {
-      // Fall through to the .env-based fallback below.
-    }
-
+    final config = await _configRepo.getConfig();
     return _CloudinaryCredentials(
-      cloudName: Env.cloudinaryCloudName.trim(),
-      apiKey: Env.cloudinaryApiKey.trim(),
-      apiSecret: Env.cloudinaryApiSecret.trim(),
+      cloudName: config.cdnCloudName.trim(),
+      apiKey: config.cdnApiKey.trim(),
+      apiSecret: config.cdnApiSecret.trim(),
     );
   }
 

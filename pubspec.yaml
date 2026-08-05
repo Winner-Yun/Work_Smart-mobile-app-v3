@@ -35,7 +35,6 @@ dependencies:
   detect_fake_location: ^2.3.2
   flutter_jailbreak_detection: ^1.1.0
   ntp: ^2.0.0
-  device_info_plus: ^11.3.0
   flutter_local_notifications: ^17.2.3
   pdf: ^3.11.3
   path_provider: ^2.1.1

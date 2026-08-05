@@ -14,9 +14,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 abstract class FaceScanLogic extends State<FaceScanScreen>
     with WidgetsBindingObserver {
-  /// Special `scanType` value: run the same liveness + face-match pipeline
-  /// as attendance check-in/out, but never save an attendance record. Used
-  /// by the "Update Face" flow to confirm identity before re-registration.
+  /// Runs the same liveness + face-match pipeline as check-in/out but never saves
+  /// an attendance record — used by "Update Face" to confirm identity first.
   static const String scanTypeVerifyOnly = 'verify_face_only';
 
   CameraController? controller;

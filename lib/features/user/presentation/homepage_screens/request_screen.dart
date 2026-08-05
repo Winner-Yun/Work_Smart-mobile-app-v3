@@ -40,8 +40,7 @@ class _RequestScreenState extends State<RequestScreen> {
   // Set by tapping a stat in the header; null shows every request.
   String? _statusFilter;
 
-  // Manual/post-create refresh only — the silent background refresh in
-  // `_initData` never touches this flag.
+  // Manual/post-create refresh only — the silent background refresh never touches this flag.
   bool get isRefreshing => _isRefreshing;
 
   List<RequestModel> get _visibleRequests => _statusFilter == null
@@ -84,8 +83,7 @@ class _RequestScreenState extends State<RequestScreen> {
     super.dispose();
   }
 
-  // Cache-first: show cached data immediately, then refresh from the
-  // network in the background; only a true cold start shows the skeleton.
+  // Cache-first: show cached data immediately, refresh in the background; only a cold start shows the skeleton.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -136,8 +134,7 @@ class _RequestScreenState extends State<RequestScreen> {
     }
   }
 
-  // Only toggles _isLoading — _isRefreshing is owned by `_loadRequests`;
-  // also used for the silent background refresh in `_initData`.
+  // Only toggles _isLoading — _isRefreshing is owned by `_loadRequests`.
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
     final workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -182,9 +179,8 @@ class _RequestScreenState extends State<RequestScreen> {
     }
   }
 
-  // Swaps to the skeleton (see build) instead of the overscroll indicator;
-  // always clears `_isRefreshing` in finally so a failed refresh can't
-  // permanently block further pulls.
+  // Swaps to the skeleton instead of the overscroll indicator; clears `_isRefreshing`
+  // in finally so a failed refresh can't permanently block further pulls.
   Future<void> _loadRequests() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);

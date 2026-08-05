@@ -525,8 +525,7 @@ class FaceAttendanceVerifier {
     for (int i = 0; i < 10; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 450));
 
-      // For liveness challenges, allow natural head motion and evaluate action
-      // directly from a single-face capture instead of strict alignment.
+      // Liveness challenges allow natural head motion, skipping strict alignment.
       final CapturedFace? current = await _captureSingleFace(cameraController);
       if (current == null) {
         continue;
@@ -677,10 +676,7 @@ class FaceAttendanceVerifier {
     return embedding.map((v) => v / norm).toList(growable: false);
   }
 
-  /// Whether a raw face record (from local cache or the API) actually
-  /// contains an embedding vector usable for verification. Shared by the
-  /// verifier itself and by callers (e.g. the homepage) that need to decide
-  /// whether a face is registered, so both agree on the same definition.
+  /// Whether a face record (local or API) has an embedding usable for verification.
   static bool hasUsableFaceEmbedding(Map<String, dynamic>? record) {
     return _extractStoredEmbeddings(record).isNotEmpty;
   }
@@ -690,11 +686,7 @@ class FaceAttendanceVerifier {
     Map<String, dynamic>? faceRecord,
   ) {
     final Map<String, dynamic> enrollment = _asMap(faceRecord);
-    // 'embeddings' is what GET /face/me returns from the server; the other
-    // keys are what gets written locally at registration time (see
-    // assign_user_face_logic.dart). Both shapes have to be recognized here
-    // since this same extractor reads both a freshly-fetched server record
-    // and the locally cached one.
+    // Recognizes both the server's 'embeddings' shape and the local registration shape.
     final dynamic rawEmbeddings = enrollment['embeddings'];
     if (rawEmbeddings is! List) {
       return <List<double>>[];

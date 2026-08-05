@@ -72,8 +72,7 @@ class InviteService {
     }
   }
 
-  /// Joins a workspace directly via a shareable invite code (as opposed to
-  /// accepting a per-user invite through [acceptInvite]).
+  /// Joins a workspace via a shareable invite code, as opposed to [acceptInvite].
   Future<Map<String, dynamic>> joinByCode(String code) async {
     final String endpoint = ApiEndpoints.joinInviteByCode(code);
     debugPrint('[InviteService] POST: $endpoint');
@@ -91,8 +90,7 @@ class InviteService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final dynamic responseData = e.response?.data;
-      // This endpoint reports errors as {"detail": "..."} (FastAPI-style)
-      // rather than the {"message": "..."} shape most other endpoints use.
+      // This endpoint uses FastAPI-style {"detail": "..."} errors, not {"message": "..."}.
       final String? serverMessage = responseData is Map
           ? (responseData['detail'] ?? responseData['message'])
                 ?.toString()
@@ -101,8 +99,7 @@ class InviteService {
       debugPrint(
         '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
       );
-      // Surface exactly what the backend says is wrong with the code (e.g.
-      // "Invite code not found") instead of a generic wrapped network error.
+      // Surface the backend's own message instead of a generic wrapped network error.
       throw Exception(
         (serverMessage != null && serverMessage.isNotEmpty)
             ? serverMessage

@@ -6,11 +6,8 @@ import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 class PolicyService {
   final ApiClient _apiClient = ApiClient();
 
-  /// Backend error bodies are usually `{"message": "..."}`, but on some
-  /// failures (5xx from a proxy, HTML error pages, etc.) the response body
-  /// isn't a Map at all — indexing a String or List with `['message']`
-  /// throws a TypeError that then masks the real error, so this only reads
-  /// the key when [data] is actually a Map.
+  /// Reads `data['message']` only when [data] is a Map — some 5xx/proxy errors
+  /// return a non-Map body, and indexing that directly throws a TypeError.
   String _extractServerMessage(dynamic data, String? fallback) {
     if (data is Map && data['message'] != null) {
       return data['message'].toString();

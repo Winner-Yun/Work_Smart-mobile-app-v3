@@ -45,9 +45,7 @@ class _LeaveAttendanceSkeletonLoadingState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Summary section — mirrors the two leave-balance cards
-            // (annual/sick remaining) so they no longer flash real numbers
-            // while the policy is still loading.
+            // Mirrors the leave-balance cards so they don't flash real numbers while loading.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(

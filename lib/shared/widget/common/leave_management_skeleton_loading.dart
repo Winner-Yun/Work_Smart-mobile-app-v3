@@ -44,10 +44,7 @@ class _LeaveManagementSkeletonLoadingState
 
         return Column(
           children: [
-            // Double overview card skeleton — mirrors the tertiary-colored
-            // card with the two circular leave-progress rings, so it no
-            // longer shows real (stale/default) numbers while the policy
-            // and leave totals are still loading.
+            // Mirrors the leave-progress overview card so it doesn't flash stale numbers while loading.
             Container(
               width: double.infinity,
               decoration: BoxDecoration(

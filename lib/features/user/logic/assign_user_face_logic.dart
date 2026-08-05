@@ -10,11 +10,9 @@ import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
 import 'package:flutter_worksmart_app/core/constants/default_profile_urls.dart';
 import 'package:flutter_worksmart_app/core/util/cloudinary/cloudinary_profile_image_service.dart';
 import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
-import 'package:flutter_worksmart_app/core/util/device/device_info_helper.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_attendance_verifier.dart';
 import 'package:flutter_worksmart_app/core/util/face/face_detection_util.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/assign_user_face_screen.dart';
-// Import the newly created Repository and Service
 import 'package:flutter_worksmart_app/features/user/repository/face_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/profile_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
@@ -41,7 +39,6 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
   bool isUploadingFaceSample = false;
   bool isApprovingFace = false;
 
-  // Use the new FaceRepository for API connection[cite: 6]
   final FaceRepository _faceRepository = FaceRepository(FaceService());
   final ProfileRepository _profileRepository = ProfileRepository(
     ProfileService(),
@@ -89,7 +86,9 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     }
     if (!status.isGranted) {
       if (mounted) {
-        await _showCameraPermissionRequiredDialog(isPermanentlyDenied: status.isPermanentlyDenied);
+        await _showCameraPermissionRequiredDialog(
+          isPermanentlyDenied: status.isPermanentlyDenied,
+        );
       }
       return;
     }
@@ -114,10 +113,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     }
     if (mounted) setState(() => isCameraInitialized = false);
 
-    // Immediately after another screen (e.g. the face-verify step) releases
-    // the camera, the hardware can briefly report "busy" while it tears
-    // down. Retry with backoff instead of failing silently and leaving the
-    // screen stuck on its loading spinner forever.
+    // Camera can briefly report "busy" right after another screen releases it — retry with backoff.
     const int maxAttempts = 3;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       final CameraController candidate = CameraController(
@@ -328,7 +324,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         ..clear()
         ..add(imageUrl);
 
-      // Store the raw embedding array[cite: 6]
+      // Store the raw embedding array
       _capturedEmbeddings
         ..clear()
         ..add(embedding);
@@ -369,7 +365,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         );
       }
 
-      // 1. Show the loading dialog before starting the data transfer
+      // Show the loading dialog before starting the data transfer
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -379,19 +375,15 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         ),
       );
 
-      // 2. Call the API via the new Repository
       await _faceRepository.registerFace(embeddingVector);
 
-      // 3. Cache the same embedding locally so the homepage/scan flow can see
-      // it immediately, without waiting on a separate server round-trip.
+      // Cache the same embedding locally so the homepage/scan flow sees it immediately.
       final String userId = _resolveUserId();
       if (userId.isNotEmpty) {
         try {
-          final String deviceInfo =
-              await DeviceInfoHelper.describeCurrentDevice();
           await DatabaseHelper().saveFaceEmbeddingWithHistory(userId, {
             'face_embeddings': embeddingVector,
-          }, deviceInfo: deviceInfo);
+          });
           debugPrint(
             '[RegisterFaceLogic] Saved face embedding to local DB for $userId',
           );
@@ -402,7 +394,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         }
       }
 
-      // 4. Dismiss the dialog once the backend processing is complete
+      // Dismiss the dialog once the backend processing is complete
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
@@ -500,7 +492,6 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     }
 
     try {
-      // Call the new backend endpoint directly with the captured file
       await _profileRepository.updateProfileImage(localFaceFile);
 
       debugPrint(

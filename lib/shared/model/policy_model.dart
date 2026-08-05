@@ -10,6 +10,7 @@ class PolicyModel {
   final int deadlineScanMinutes;
   final int annualLeaveLimit;
   final int sickLeaveLimit;
+  final bool requiresCheckOut;
   final String status;
   final DateTime createdAt;
 
@@ -25,6 +26,7 @@ class PolicyModel {
     required this.deadlineScanMinutes,
     required this.annualLeaveLimit,
     required this.sickLeaveLimit,
+    required this.requiresCheckOut,
     required this.status,
     required this.createdAt,
   });
@@ -57,6 +59,7 @@ class PolicyModel {
       deadlineScanMinutes: json['deadline_scan_minutes'] ?? 0,
       annualLeaveLimit: json['annual_leave_limit'] ?? 0,
       sickLeaveLimit: json['sick_leave_limit'] ?? 0,
+      requiresCheckOut: json['requires_check_out'] ?? true,
       status: json['status'] ?? '',
       createdAt: parseDate(json['created_at']),
     );

@@ -5,13 +5,8 @@ import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 
 class ApiClient {
   ApiClient._internal() {
-    // No default content-type header here on purpose. Dio's `contentType`
-    // getter always reads straight through to the headers map (regardless
-    // of how it was set), so a base-level 'application/json' header can
-    // never be cleanly overridden per-request — trying to null it out for
-    // multipart uploads throws "Unable to set different values for
-    // `contentType` and the content-type header" instead of clearing it.
-    // Each request sets its own content type instead (see `_optionsFor`).
+    // No default content-type here — each request sets its own via `_optionsFor`,
+    // otherwise multipart uploads can't override a base-level JSON header.
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
@@ -61,7 +56,8 @@ class ApiClient {
                 }
               }
             } else {
-              await _databaseHelper.clearCachedLogin();
+              // Refresh token is dead — force logout and wipe all cached user data.
+              await _databaseHelper.clearAllUserData();
             }
           }
           handler.next(error);
@@ -79,11 +75,8 @@ class ApiClient {
 
   Dio get client => _dio;
 
-  // Concurrent 401s (e.g. several requests firing together) must share a
-  // single refresh call. Without this, each one reads the same still-cached
-  // refresh token, and if the backend rotates refresh tokens, only the first
-  // call to actually hit the server succeeds — the rest get rejected with
-  // an already-invalidated token and wrongly clear the user's session.
+  // Shares one refresh call across concurrent 401s so a rotating refresh
+  // token isn't used twice and the session doesn't get wrongly cleared.
   Future<bool>? _refreshInFlight;
 
   Future<bool> _refreshToken() {
@@ -110,7 +103,6 @@ class ApiClient {
         final newAccessToken = body['access_token'];
         final newRefreshToken = body['refresh_token'] ?? refreshToken;
 
-        // Update tokens in your local database
         await _databaseHelper.updateTokens(newAccessToken, newRefreshToken);
         return true;
       }
@@ -144,11 +136,7 @@ class ApiClient {
     return _dio.post(endpoint, data: data, options: _optionsFor(data));
   }
 
-  // FormData (multipart uploads like leave create/update) needs no explicit
-  // content type at all — Dio sets the correct
-  // 'multipart/form-data; boundary=...' header itself once it sees the
-  // request body is FormData, as long as nothing has already claimed the
-  // content-type header. Everything else gets an explicit JSON content type.
+  // FormData (multipart uploads) sets its own content-type; everything else gets JSON.
   Options? _optionsFor(Object? data) {
     if (data is FormData) return null;
     return Options(contentType: 'application/json');

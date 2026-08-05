@@ -8,8 +8,7 @@ class RequestRepository {
 
   RequestRepository(this._service);
 
-  /// Tolerates the backend returning either a plain list or a paginated
-  /// wrapper under a `data`/`items`/`results`/`requests` key.
+  /// Tolerates a plain list or a paginated wrapper under `data`/`items`/`results`/`requests`.
   Future<List<RequestModel>> getMyRequests(
     String workspaceId, {
     int page = 1,

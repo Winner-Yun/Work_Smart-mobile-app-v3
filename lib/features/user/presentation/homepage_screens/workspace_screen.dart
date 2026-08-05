@@ -496,8 +496,7 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
     );
   }
 
-  // Keep a single Scrollable; only swap its content, or two ScrollPositions
-  // attach to _scrollController in one frame and it throws.
+  // Keep a single Scrollable and only swap its content, or two ScrollPositions attach and it throws.
   Widget _buildBody() {
     return LayoutBuilder(
       builder: (context, constraints) {

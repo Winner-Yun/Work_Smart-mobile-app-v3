@@ -34,8 +34,7 @@ class _TaskScreenState extends State<TaskScreen> {
   // Set by tapping a stat in the header; null shows every task.
   String? _statusFilter;
 
-  // Manual pull-to-refresh only — the silent background refresh in
-  // `_initData` never touches this flag.
+  // Manual pull-to-refresh only — the silent background refresh never touches this flag.
   bool get isRefreshing => _isRefreshing;
 
   List<TaskModel> get _visibleTasks => _statusFilter == null
@@ -76,8 +75,7 @@ class _TaskScreenState extends State<TaskScreen> {
     super.dispose();
   }
 
-  // Cache-first: show cached data immediately, then refresh from the
-  // network in the background; only a true cold start shows the skeleton.
+  // Cache-first: show cached data immediately, refresh in the background; only a cold start shows the skeleton.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -126,8 +124,7 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  // Only toggles _isLoading — _isRefreshing is owned by `_loadTasks`;
-  // also used for the silent background refresh in `_initData`.
+  // Only toggles _isLoading — _isRefreshing is owned by `_loadTasks`.
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
     final workspaceId = _workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -172,9 +169,8 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  // Swaps to the skeleton (see build) instead of the overscroll indicator;
-  // always clears `_isRefreshing` in finally so a failed refresh can't
-  // permanently block further pulls.
+  // Swaps to the skeleton instead of the overscroll indicator; clears `_isRefreshing`
+  // in finally so a failed refresh can't permanently block further pulls.
   Future<void> _loadTasks() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);

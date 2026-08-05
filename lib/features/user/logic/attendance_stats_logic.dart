@@ -84,11 +84,8 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
     }
   }
 
-  /// Local-first init: load whatever attendance is cached instantly (and
-  /// derive monthlyStats from it), then silently refresh from the network in
-  /// the background. Only falls back to a blocking fetch (with the skeleton
-  /// loader, gated on `monthlyStats.isEmpty`) on a true cold start where
-  /// nothing is cached yet.
+  /// Local-first init: show cached attendance instantly, refresh in the background,
+  /// and only block with the skeleton loader on a true cold start.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -98,8 +95,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
     if (!mounted) return;
 
     if (userAttendanceRecords.isNotEmpty) {
-      // Keep the skeleton up briefly even though the cache read was
-      // instant, so loading doesn't read as a jarring instant pop-in.
+      // Keep the skeleton up briefly so an instant cache read doesn't pop in jarringly.
       await Future.delayed(AppDurations.minSkeletonDisplay);
       if (!mounted) return;
       setState(() {
@@ -200,10 +196,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
     }
   }
 
-  /// Recomputes monthlyStats/selectedYear/selectedMonthIndex from
-  /// userAttendanceRecords. Must run against both the cached list (initial
-  /// local load) and freshly-fetched data (background/manual refresh) so
-  /// derived stats never go stale relative to the raw records.
+  /// Recomputes monthlyStats/selectedYear/selectedMonthIndex from userAttendanceRecords.
   void _recomputeStats() {
     final now = DateTime.now();
     selectedYear = now.year;
@@ -228,11 +221,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
         : 0;
   }
 
-  /// Manual refresh — drops back to the full skeleton loader (build() shows
-  /// it whenever `monthlyStats.isEmpty || isRefreshing`) instead of a modal
-  /// dialog over the current page. Always hits the network directly
-  /// (explicit user action) and updates the cache on success via
-  /// `_fetchFromNetwork`.
+  /// Manual pull-to-refresh — always hits the network and updates the cache on success.
   Future<void> onRefresh() async {
     if (isRefreshing || !mounted) return;
     setState(() => isRefreshing = true);

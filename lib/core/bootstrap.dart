@@ -8,9 +8,7 @@ import 'package:flutter_worksmart_app/config/theme_manager.dart';
 import 'package:flutter_worksmart_app/core/util/notification/local_notification_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-// Runs in a separate background isolate when a push arrives while the app is
-// backgrounded/terminated, so it needs its own Firebase init. Must stay a
-// top-level (or static) function — instance methods can't be used here.
+// Runs in its own isolate for backgrounded/terminated pushes, so must stay top-level.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -25,11 +23,8 @@ class AppBootstrap {
     _listenForForegroundMessages();
     await _printFirebaseConnectionInfo();
 
-    // Init environment variables. `.env` is optional at runtime — if it's
-    // missing (e.g. stripped from a production build), `dotenv.env` just
-    // stays empty instead of throwing and taking the whole app down before
-    // a single frame renders. Every `Env.*` getter already falls back to a
-    // safe default for this case.
+    // `.env` is optional at runtime — missing it just leaves dotenv.env empty
+    // instead of crashing, since every `Env.*` getter has a safe fallback.
     try {
       await dotenv.load(fileName: '.env', isOptional: true);
     } catch (e) {
@@ -46,9 +41,7 @@ class AppBootstrap {
     return await InitialRouteResolver.resolve();
   }
 
-  // Prints which installed package and which Firebase project this build
-  // actually wired up to, so a mismatch (wrong google-services.json, wrong
-  // applicationId) is obvious in the console instead of failing silently.
+  // Logs the connected Firebase project so a config mismatch is obvious, not silent.
   static Future<void> _printFirebaseConnectionInfo() async {
     final packageInfo = await PackageInfo.fromPlatform();
     final options = Firebase.app().options;
@@ -61,9 +54,7 @@ class AppBootstrap {
     debugPrint('================================');
   }
 
-  // While the app is in the foreground, Android does not auto-display FCM
-  // notifications — it's left to the app to show one, so we surface it
-  // through the same local-notification channel used elsewhere.
+  // Android won't auto-display FCM notifications in the foreground, so show one ourselves.
   static void _listenForForegroundMessages() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final notification = message.notification;

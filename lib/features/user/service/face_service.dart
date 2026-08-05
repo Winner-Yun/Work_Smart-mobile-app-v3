@@ -6,7 +6,6 @@ import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 class FaceService {
   final ApiClient _apiClient = ApiClient();
 
-  // Your existing registerFace method
   Future<Map<String, dynamic>> registerFace(List<num> embeddings) async {
     final String endpoint = ApiEndpoints.faceRegister;
     debugPrint('[FaceService] Requesting: $endpoint');
@@ -37,7 +36,6 @@ class FaceService {
     }
   }
 
-  // NEW: Get Face Embeddings Method
   Future<Map<String, dynamic>> getMyFaceEmbeddings() async {
     final String endpoint = ApiEndpoints.faceMe;
     debugPrint('[FaceService] Requesting: $endpoint');

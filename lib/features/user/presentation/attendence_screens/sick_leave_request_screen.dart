@@ -78,8 +78,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     _loadInitialData();
   }
 
-  // Cache-first; a true cold start still blocks since the form can't
-  // validate submissions without the real limits.
+  // Cache-first; a cold start still blocks since the form needs real limits to validate.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -242,6 +241,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
         'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
         'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
         'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+        'requires_check_out': fetchedPolicy.requiresCheckOut,
         'status': fetchedPolicy.status,
       };
 

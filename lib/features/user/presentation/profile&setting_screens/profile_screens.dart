@@ -109,8 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Cache-first: show cached data immediately and refresh in the background;
-  // only a true cold start (nothing cached) waits on the network.
+  // Cache-first: show cached data immediately, refresh in the background; only a cold start waits.
   Future<void> _loadData() async {
     final cached = await DatabaseHelper().getUserProfile();
     if (cached != null) {

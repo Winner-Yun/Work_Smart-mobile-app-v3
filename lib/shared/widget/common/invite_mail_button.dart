@@ -3,9 +3,8 @@ import 'package:flutter_worksmart_app/app/routes/app_route.dart';
 import 'package:flutter_worksmart_app/features/user/repository/invite_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/invite_service.dart';
 
-/// Mail icon that opens the "My Invites" screen (accept/reject pending
-/// workspace invites), with a small badge showing how many are pending.
-/// Self-contained: fetches its own count via REST, no external state needed.
+/// Mail icon opening "My Invites", with a badge for how many are pending.
+/// Self-contained: fetches its own count via REST.
 class InviteMailButton extends StatefulWidget {
   final Map<String, dynamic>? loginData;
   final Color? iconColor;

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_worksmart_app/config/env.dart';
 import 'package:flutter_worksmart_app/config/language_manager.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
 import 'package:flutter_worksmart_app/core/constants/appcolor.dart';
-import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/attendance_stats_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/attendence_screens/leave_attendance_screen.dart';
 import 'package:flutter_worksmart_app/features/user/presentation/homepage_screens/home_tab_wrapper.dart';
@@ -23,10 +21,6 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
-  bool _hasShownPasswordChangeAlert = false;
-  bool _isShowingPasswordChangeAlert = false;
-  bool _cachedPasswordUsesDefault = false;
-  bool _isHomeStartupFlowCompleted = false;
 
   // Without a confirmed workspace, only the Home and Profile tabs are usable.
   bool _hasWorkspace = false;
@@ -38,7 +32,6 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _currentIndex = widget.initialIndex;
     LanguageManager().addListener(_handleLanguageChanged);
-    _loadDefaultPasswordStateFromCache();
   }
 
   @override
@@ -50,68 +43,6 @@ class _MainScreenState extends State<MainScreen> {
   void _handleLanguageChanged() {
     if (!mounted) return;
     setState(() {});
-  }
-
-  Future<void> _loadDefaultPasswordStateFromCache() async {
-    final cachedLogin = await DatabaseHelper().getCachedLogin();
-    final cachedPassword = (cachedLogin?['password'] ?? '').toString().trim();
-    final defaultPassword = Env.defaultUserPassword.trim();
-
-    _cachedPasswordUsesDefault =
-        cachedPassword.isNotEmpty &&
-        defaultPassword.isNotEmpty &&
-        cachedPassword == defaultPassword;
-
-    _maybePromptPasswordChange();
-  }
-
-  void _maybePromptPasswordChange() {
-    if (!_isHomeStartupFlowCompleted ||
-        _hasShownPasswordChangeAlert ||
-        _isShowingPasswordChangeAlert ||
-        !_cachedPasswordUsesDefault) {
-      return;
-    }
-
-    _hasShownPasswordChangeAlert = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showPasswordChangeAlert();
-    });
-  }
-
-  Future<void> _showPasswordChangeAlert() async {
-    if (!mounted || _isShowingPasswordChangeAlert) {
-      return;
-    }
-
-    _isShowingPasswordChangeAlert = true;
-    await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(AppStrings.tr('default_password_alert_title')),
-          content: Text(AppStrings.tr('default_password_alert_message')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(
-                AppStrings.tr('later'),
-                style: TextStyle(color: Theme.of(context).colorScheme.primary),
-              ),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(
-                AppStrings.tr('change_now'),
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-    _isShowingPasswordChangeAlert = false;
   }
 
   @override
@@ -126,11 +57,7 @@ class _MainScreenState extends State<MainScreen> {
     final List<Widget> screens = [
       HomeTabWrapper(
         loginData: widget.loginData,
-        onStartupFlowCompleted: () {
-          if (_isHomeStartupFlowCompleted) return;
-          _isHomeStartupFlowCompleted = true;
-          _maybePromptPasswordChange();
-        },
+        onStartupFlowCompleted: () {},
         onProfileTap: () {
           setState(() {
             _currentIndex = _profileTabIndex;

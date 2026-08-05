@@ -10,20 +10,9 @@ import 'package:flutter_worksmart_app/features/user/logic/face_scan_logic.dart';
 import 'package:intl/intl.dart';
 
 /// Orchestrates the secure "Update Face" flow shared by Settings and the
-/// homepage shortcut:
-///
-///   1. Enforce the 30-day cooldown since the last successful update.
-///   2. Explain the flow and get explicit user confirmation.
-///   3. Re-authenticate with Google (proves the caller still controls the
-///      signed-in account) before anything sensitive happens.
-///   4. Verify the currently captured face against the stored embedding
-///      (via [FaceScanScreen] in verify-only mode — no attendance is saved).
-///   5. Re-use the existing face registration screen to capture the new
-///      face; the actual embedding swap, backup, and audit log are handled
-///      centrally in [DatabaseHelper.saveFaceEmbeddingWithHistory].
-///
-/// This does not call a dedicated backend "update" endpoint — the backend
-/// treats `/face/register` as an upsert, so re-registering is the update.
+/// homepage shortcut: cooldown check, user confirmation, Google re-auth,
+/// verify against the stored embedding, then re-register the new face.
+/// Re-registering is the update — there's no separate backend endpoint.
 class UpdateFaceFlowController {
   UpdateFaceFlowController._();
 
@@ -56,8 +45,7 @@ class UpdateFaceFlowController {
       ).getUserProfile();
       currentEmail = userProfile.email;
     } catch (_) {
-      // Fall back to no email check if the profile fetch fails — the
-      // re-auth step will still require a live Google sign-in.
+      // No email check if the profile fetch fails — re-auth still requires Google sign-in.
     }
 
     if (!context.mounted) return;
@@ -82,14 +70,11 @@ class UpdateFaceFlowController {
     );
 
     if (verifyResult != true) {
-      // User backed out or verification failed/timed out — the scan screen
-      // already surfaced the specific error, nothing more to do here.
+      // Scan screen already surfaced the error — nothing more to do here.
       return;
     }
 
-    // Give the just-closed verify screen's camera a moment to fully release
-    // the hardware before the register screen tries to claim it again —
-    // otherwise camera init can fail/hang on some devices.
+    // Let the camera fully release before the register screen claims it again.
     await Future.delayed(const Duration(milliseconds: 400));
 
     if (!context.mounted) return;

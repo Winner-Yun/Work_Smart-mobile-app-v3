@@ -78,8 +78,8 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     }
   }
 
-  // Local-first: shows cached data instantly and refreshes in the
-  // background; only blocks with a loader on a true cold start with no cache.
+  // Local-first: shows cached data instantly, refreshes in the background, only
+  // blocks with a loader on a true cold start.
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;

@@ -94,8 +94,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     }
   }
 
-  // Cache-first: render cached data immediately, then refresh from the
-  // server in the background; only a true cold start blocks on the network.
+  // Cache-first: render cached data immediately, refresh in the background; only a cold start blocks.
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');
@@ -265,6 +264,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
         'deadline_scan_minutes': fetchedPolicy.deadlineScanMinutes,
         'annual_leave_limit': fetchedPolicy.annualLeaveLimit,
         'sick_leave_limit': fetchedPolicy.sickLeaveLimit,
+        'requires_check_out': fetchedPolicy.requiresCheckOut,
         'status': fetchedPolicy.status,
       };
 
@@ -289,8 +289,8 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     }
   }
 
-  // Guarded by _isRefreshing/_scrolledUp so one pull only triggers one refresh.
-  // Always clears _isRefreshing in finally, or a failed refresh would permanently block future pulls.
+  // Guarded so one pull only triggers one refresh; clears _isRefreshing in finally
+  // or a failed refresh would permanently block future pulls.
   Future<void> _handleRefresh() async {
     if (_isRefreshing) return;
     if (!mounted) return;
@@ -469,8 +469,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     );
   }
 
-  // _isRefreshing swaps the whole screen to skeleton, so this indicator
-  // needs no loading state of its own.
+  // _isRefreshing swaps the whole screen to skeleton, so no loading state needed here.
   Widget _buildPullToRefreshIndicator() {
     return AnimatedBuilder(
       animation: _scrollController,

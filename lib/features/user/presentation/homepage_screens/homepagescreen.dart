@@ -55,6 +55,74 @@ class _HomePageScreenState extends HomePageLogic {
     super.dispose();
   }
 
+  // Switching workspace wipes every per-workspace cache, so confirm before firing it.
+  void _confirmSwitchWorkspace() {
+    if (widget.onSwitchWorkspace == null) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Icon(
+          Icons.swap_horiz_rounded,
+          color: Theme.of(context).colorScheme.primary,
+          size: 40,
+        ),
+        title: Text(
+          AppStrings.tr('confirm_switch_workspace_title'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          AppStrings.tr('confirm_switch_workspace_msg'),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(AppStrings.tr('cancel_button')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        widget.onSwitchWorkspace?.call();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(AppStrings.tr('switch')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // isManualRefreshing is only set by explicit pull-to-refresh, not the silent background refresh.
@@ -96,7 +164,9 @@ class _HomePageScreenState extends HomePageLogic {
                         const SizedBox(height: 20),
 
                         if (hasLocalFaceEmbedding)
-                          (shouldShowCheckOutDeadlineCard
+                          (!isWorkspaceSetupReady
+                                  ? _buildWorkspaceSetupLoadingCard(context)
+                                  : shouldShowCheckOutDeadlineCard
                                   ? _buildScanDeadlineCard(context)
                                   : hasMockScanSuccess
                                   ? _buildScanSuccessCard(context)
@@ -357,7 +427,7 @@ class _HomePageScreenState extends HomePageLogic {
                 ),
                 if (widget.onSwitchWorkspace != null)
                   InkWell(
-                    onTap: widget.onSwitchWorkspace,
+                    onTap: _confirmSwitchWorkspace,
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -769,6 +839,55 @@ class _HomePageScreenState extends HomePageLogic {
     );
   }
 
+  Widget _buildWorkspaceSetupLoadingCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: primaryColor.withOpacity(0.3), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: primaryColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            AppStrings.tr('workspace_setup_loading_title'),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: theme.textTheme.bodyLarge?.color,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            AppStrings.tr('workspace_setup_loading_desc'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textGrey, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildScanDeadlineCard(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -793,7 +912,9 @@ class _HomePageScreenState extends HomePageLogic {
               Icon(Icons.timer_off_rounded, color: Colors.red.shade400),
               const SizedBox(width: 8),
               Text(
-                'Check-out deadline reached',
+                requiresCheckOut
+                    ? 'Check-out deadline reached'
+                    : 'Check-in deadline reached',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -812,7 +933,9 @@ class _HomePageScreenState extends HomePageLogic {
           ),
           const SizedBox(height: 6),
           Text(
-            'Deadline is counted from end time + $deadlineScanMinutes minutes. Map scan is disabled after deadline.',
+            requiresCheckOut
+                ? 'Deadline is counted from end time + $deadlineScanMinutes minutes. Map scan is disabled after deadline.'
+                : 'Deadline is counted from check-in start + $deadlineScanMinutes minutes. Map scan is disabled after deadline.',
             style: const TextStyle(color: AppColors.textGrey, fontSize: 13),
           ),
         ],
@@ -984,7 +1107,7 @@ class _HomePageScreenState extends HomePageLogic {
         if (widget.onSwitchWorkspace != null)
           IconButton(
             tooltip: AppStrings.tr('switch_workspace'),
-            onPressed: widget.onSwitchWorkspace,
+            onPressed: _confirmSwitchWorkspace,
             icon: const Icon(Icons.home_work_sharp),
           ),
         TaskIconButton(loginData: widget.loginData),
@@ -1057,6 +1180,10 @@ class _HomePageScreenState extends HomePageLogic {
   }
 
   Widget _buildTimeAttendanceSection(BuildContext context) {
+    if (!requiresCheckOut) {
+      return _buildCheckInOnlyCard(context);
+    }
+
     return Row(
       children: [
         _buildTimeCard(
@@ -1087,6 +1214,130 @@ class _HomePageScreenState extends HomePageLogic {
           true,
         ),
       ],
+    );
+  }
+
+  Widget _buildCheckInOnlyCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final String checkInTime = currentAttendance['check_in'] ?? "--:--";
+    final bool isCheckedIn = isSelectedScanCompleted;
+
+    return InkWell(
+      onTap: () => selectAttendanceScanType('check_in'),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: theme.cardTheme.color,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: primaryColor.withOpacity(isCheckedIn ? 0.5 : 0.2),
+            width: isCheckedIn ? 2 : 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withOpacity(0.06),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        primaryColor.withOpacity(0.28),
+                        primaryColor.withOpacity(0.10),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Icon(
+                    Icons.login_rounded,
+                    color: primaryColor,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.tr('check_in'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textGrey,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        checkInTime,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: theme.textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (isCheckedIn ? primaryColor : Colors.grey)
+                        .withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isCheckedIn
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        size: 14,
+                        color: isCheckedIn
+                            ? primaryColor
+                            : Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        isCheckedIn
+                            ? AppStrings.tr('present')
+                            : AppStrings.tr('ready_to_scan'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isCheckedIn
+                              ? primaryColor
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

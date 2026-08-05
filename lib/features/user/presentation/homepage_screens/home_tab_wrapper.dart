@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_worksmart_app/core/util/database/attendance_data.dart';
+import 'package:flutter_worksmart_app/core/util/database/database_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'homepagescreen.dart';
-// Adjust imports to match your project paths:
 import 'workspace_screen.dart';
 
 class HomeTabWrapper extends StatefulWidget {
@@ -60,12 +61,17 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
   }
 
   Future<void> _handleSwitchWorkspace() async {
-    // Clear the saved workspace ID (and its cached name) from storage so
-    // the user is forced to re-select a workspace on the next app start,
-    // and other screens don't keep showing the stale workspace name.
+    // Clear the saved workspace so the user must re-select one on next app start.
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_workspaceIdKey);
     await prefs.remove('cached_selected_workspace');
+
+    // Sweep every screen's per-workspace cache so none show stale data from the last workspace.
+    await DatabaseHelper().clearWorkspaceScopedCaches();
+
+    // Global in-memory cache that survives HomePageScreen's rebuild — reset it so the
+    // next workspace doesn't briefly show the previous one's check-in/check-out status.
+    setAttendanceRecords(const <Map<String, dynamic>>[]);
 
     if (mounted) {
       setState(() {
@@ -87,7 +93,7 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 1. If NO workspace is selected -> Show WorkspaceScreen at Index 0
+    // No workspace selected -> show WorkspaceScreen.
     if (_selectedWorkspaceId == null || _selectedWorkspaceId!.isEmpty) {
       return WorkspaceScreen(
         loginData: widget.loginData,
@@ -97,7 +103,7 @@ class _HomeTabWrapperState extends State<HomeTabWrapper> {
       );
     }
 
-    // 2. If workspace IS selected -> Show HomePageScreen at Index 0
+    // Workspace selected -> show HomePageScreen.
     return HomePageScreen(
       loginData: widget.loginData,
       onStartupFlowCompleted: widget.onStartupFlowCompleted,

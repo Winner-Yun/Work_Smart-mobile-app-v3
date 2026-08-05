@@ -29,10 +29,8 @@ class AttendanceModel {
     required this.mockLocationDetected,
   });
 
-  // The backend returns MongoDB extended JSON: object ids come as
-  // `{"$oid": "..."}` and datetimes as `{"$date": "..."}` rather than plain
-  // strings, so every field is unwrapped defensively instead of assuming a
-  // single fixed shape.
+  // Backend sends MongoDB extended JSON (`{"$oid": ...}`, `{"$date": ...}`), so
+  // every field is unwrapped defensively instead of assuming plain strings.
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
     final String? checkInRaw = _readTimeField(json, const [
       'check_in',
@@ -88,8 +86,7 @@ class AttendanceModel {
     );
   }
 
-  /// Legacy `{uid, date, check_in, check_out, total_hours, status}` shape
-  /// consumed by the existing homepage/calendar/stats UI code.
+  /// Legacy shape consumed by the homepage/calendar/stats UI code.
   Map<String, dynamic> toLegacyMap() => {
     'uid': uid,
     'date': date,
@@ -99,9 +96,7 @@ class AttendanceModel {
     'status': status,
   };
 
-  // Full round-trip shape (accepted back by fromJson) used for local
-  // caching — toLegacyMap() above deliberately drops fields the UI doesn't
-  // need, which would lose data if used to re-hydrate a cached list.
+  // Full round-trip shape for local caching — toLegacyMap() drops fields this needs.
   Map<String, dynamic> toJson() => {
     'id': id,
     'workspace_id': workspaceId,
@@ -128,9 +123,7 @@ class AttendanceModel {
     return null;
   }
 
-  /// Reads a datetime-ish field, unwrapping MongoDB extended JSON
-  /// (`{"$date": "..."}`) if present; otherwise treats the value as an
-  /// already-plain ISO or 12-hour string.
+  /// Reads a datetime field, unwrapping MongoDB extended JSON if present.
   static String? _readTimeField(Map<String, dynamic> json, List<String> keys) {
     for (final key in keys) {
       final value = json[key];
@@ -147,8 +140,7 @@ class AttendanceModel {
     return null;
   }
 
-  /// Unwraps a MongoDB extended-JSON object id (`{"$oid": "..."}`), or
-  /// returns the value as-is if it's already a plain string.
+  /// Unwraps a MongoDB extended-JSON object id, or returns a plain string as-is.
   static String _extractObjectId(dynamic value) {
     if (value == null) return '';
     if (value is Map) {

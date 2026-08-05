@@ -78,14 +78,14 @@ class AuthLogic {
           : null;
 
       if (data == null) {
-        await _databaseHelper.clearCachedLogin();
+        await _databaseHelper.clearAllUserData();
         _showDeletedAccountAlert();
         return;
       }
 
       final status = (data['status'] ?? '').toString().trim().toLowerCase();
       if (status == 'suspended') {
-        await _databaseHelper.clearCachedLogin();
+        await _databaseHelper.clearAllUserData();
         _showSuspendedAlert();
         return;
       }
@@ -94,7 +94,7 @@ class AuthLogic {
       onAutoLogin(username, userId, userType);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        await _databaseHelper.clearCachedLogin();
+        await _databaseHelper.clearAllUserData();
       }
     } catch (_) {}
   }
@@ -195,12 +195,8 @@ class AuthLogic {
     }
   }
 
-  /// Fetches `/config/data` right after login and caches only the two
-  /// values that are safe to keep on-device (CDN cloud name, Google Maps
-  /// key) via the generic settings store. `cdn_api_key`/`cdn_api_secret`
-  /// are deliberately never cached — callers that need them re-fetch the
-  /// config live via [ConfigRepository.getConfig] instead. Best-effort: a
-  /// failure here must not fail the login itself.
+  /// Caches only the device-safe config values post-login (CDN name, Maps key);
+  /// secrets are never cached. Best-effort — must not fail the login.
   Future<void> _fetchAndCacheAppConfig() async {
     try {
       final config = await _configRepo.getConfig();
@@ -214,10 +210,8 @@ class AuthLogic {
     }
   }
 
-  /// Fetches the device's FCM registration token once the user is confirmed
-  /// logged in (fresh Google sign-in or a valid cached session) and
-  /// registers it with the backend so this device receives push
-  /// notifications. Best-effort: a failure here must not fail the login.
+  /// Registers this device's FCM token with the backend after login.
+  /// Best-effort — must not fail the login.
   Future<void> _fetchAndRegisterFcmToken() async {
     try {
       final messaging = FirebaseMessaging.instance;
@@ -242,11 +236,8 @@ class AuthLogic {
 
   // ─────────── SENSITIVE-ACTION RE-AUTHENTICATION ───────────
 
-  /// Forces a fresh, interactive Google sign-in (bypassing any cached
-  /// silent session) and confirms it resolves to [expectedEmail]. Used to
-  /// prove "you currently hold this Google account" before a sensitive
-  /// action (e.g. updating the stored face embedding). This does NOT touch
-  /// the app's own session/JWT — it only verifies the Google identity.
+  /// Forces a fresh interactive Google sign-in to confirm [expectedEmail] before a
+  /// sensitive action. Verifies Google identity only — doesn't touch the app session.
   Future<GoogleReauthResult> reauthenticateForSensitiveAction({
     required String expectedEmail,
   }) async {
@@ -284,10 +275,7 @@ class AuthLogic {
     }
   }
 
-  /// Shows a blocking "Connecting to Google..." indicator so the user knows
-  /// something is happening while `initialize()`/`signOut()` run and the
-  /// native account picker is being prepared. Dismissed as soon as
-  /// [reauthenticateForSensitiveAction] resolves either way.
+  /// Shows a blocking "Connecting to Google..." indicator while sign-in is prepared.
   void _showConnectingGoogleDialog() {
     if (!context.mounted) return;
     showDialog<void>(

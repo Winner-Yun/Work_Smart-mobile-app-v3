@@ -100,10 +100,8 @@ class LeaveRequestLogic {
     );
   }
 
-  /// Confirms with the user, shows a loading spinner, then runs [onDelete]
-  /// (the caller's actual `LeaveRepository.deleteLeave` REST call). Approved
-  /// requests can't be removed — same rule as before, just no longer
-  /// backed by Firestore.
+  /// Confirms with the user, shows a spinner, then runs [onDelete]. Approved
+  /// requests can't be removed.
   static Future<bool> confirmAndDeleteLeave(
     BuildContext context, {
     required LeaveModel record,

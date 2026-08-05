@@ -43,8 +43,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
   final DateFormat _dateFormatter = DateFormat('dd MMM yyyy');
   late final ScrollController _scrollController;
 
-  // Own cache key, kept separate from leave_management_screen.dart's
-  // cached_leaves_$workspaceId, so the two never clobber each other.
+  // Own cache key, separate from leave_management_screen.dart's, so they never clobber each other.
   static const String _cacheKeyPrefix = 'cached_leave_all_requests_';
 
   @override
@@ -73,8 +72,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     super.dispose();
   }
 
-  // Swaps to the loading state (see build) instead of a dialog; always
-  // clears via finally so a failed fetch can't block further pulls.
+  // Swaps to the loading state instead of a dialog; clears via finally so a failed fetch can't block further pulls.
   Future<void> _handleRefresh() async {
     if (_isRefreshing || !mounted) return;
     setState(() => _isRefreshing = true);
@@ -90,8 +88,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
     }
   }
 
-  // Local-first: show cached data instantly, then refresh from the network
-  // in the background; only a true cold start blocks on `_loadData()`.
+  // Local-first: show cached data instantly, refresh in the background; only a cold start blocks.
   Future<void> _initLoad() async {
     final prefs = await SharedPreferences.getInstance();
     _workspaceId = prefs.getString('selected_workspace_id');

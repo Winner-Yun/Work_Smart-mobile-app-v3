@@ -6,8 +6,7 @@ class TaskRepository {
 
   TaskRepository(this._service);
 
-  /// Tolerates the backend returning either a plain list or a paginated
-  /// wrapper under a `data`/`items`/`results`/`tasks` key.
+  /// Tolerates a plain list or a paginated wrapper under `data`/`items`/`results`/`tasks`.
   Future<List<TaskModel>> getWorkspaceTasks(
     String workspaceId, {
     int page = 1,

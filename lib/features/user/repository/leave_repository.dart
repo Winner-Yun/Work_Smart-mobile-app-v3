@@ -50,9 +50,8 @@ class LeaveRepository {
     return _service.deleteLeave(leaveId);
   }
 
-  /// The current user's leave requests for [workspaceId]. Tolerates the
-  /// backend returning either a single record or a paginated list under a
-  /// wrapper key (`data`/`records`/`leaves`/`items`/`results`).
+  /// The current user's leave requests for [workspaceId]. Tolerates a plain
+  /// list or a paginated wrapper under `data`/`records`/`leaves`/`items`/`results`.
   Future<List<LeaveModel>> getMyLeaves(
     String workspaceId, {
     int? page,
