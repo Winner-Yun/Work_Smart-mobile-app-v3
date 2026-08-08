@@ -96,9 +96,7 @@ class FaceAttendanceVerifier {
       if (cached != null) {
         return cached;
       }
-    } catch (e) {
-      debugPrint('Failed to read cached face embedding: $e');
-    }
+    } catch (_) {}
 
     Map<String, dynamic>? record;
     try {
@@ -107,16 +105,12 @@ class FaceAttendanceVerifier {
           ? Map<String, dynamic>.from(rawData['data'])
           : rawData;
       record = hasUsableFaceEmbedding(dataMap) ? dataMap : null;
-    } catch (e) {
-      debugPrint('FaceRepository.getMyFaceEmbeddings failed: $e');
-    }
+    } catch (_) {}
 
     if (record != null) {
       try {
         await DatabaseHelper().saveFaceEmbedding(userId, record);
-      } catch (e) {
-        debugPrint('Failed to cache face embedding locally: $e');
-      }
+      } catch (_) {}
     }
 
     return record;

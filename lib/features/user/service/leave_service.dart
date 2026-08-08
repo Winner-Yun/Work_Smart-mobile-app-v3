@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -97,8 +96,6 @@ class LeaveService {
       if (status != null) 'status': status,
       if (dateFilter != null) 'date_filter': dateFilter,
     };
-    debugPrint('[LeaveService] GET $endpoint');
-    debugPrint('[LeaveService] Query Params: $queryParams');
 
     try {
       final Response response = await _apiClient.get(
@@ -106,8 +103,6 @@ class LeaveService {
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
 
-      debugPrint('[LeaveService] Status Code: ${response.statusCode}');
-      debugPrint('[LeaveService] Response Data: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -125,24 +120,17 @@ class LeaveService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[LeaveService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[LeaveService] Unexpected Error: $e');
-      debugPrint('[LeaveService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
 
   Future<void> deleteLeave(String leaveId) async {
     final String endpoint = ApiEndpoints.leaveById(leaveId);
-    debugPrint('[LeaveService] DELETE $endpoint');
 
     try {
       final Response response = await _apiClient.delete(endpoint);
-      debugPrint('[LeaveService] Status Code: ${response.statusCode}');
 
       if (response.statusCode != 200 &&
           response.statusCode != 201 &&
@@ -154,13 +142,8 @@ class LeaveService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[LeaveService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[LeaveService] Unexpected Error: $e');
-      debugPrint('[LeaveService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
@@ -171,15 +154,12 @@ class LeaveService {
     required bool isPost,
     required String label,
   }) async {
-    debugPrint('[LeaveService] ${isPost ? 'POST' : 'PATCH'} $endpoint');
 
     try {
       final Response response = isPost
           ? await _apiClient.post(endpoint, data: formData)
           : await _apiClient.patch(endpoint, data: formData);
 
-      debugPrint('[LeaveService] Status Code: ${response.statusCode}');
-      debugPrint('[LeaveService] Response Data: ${response.data}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data;
@@ -195,13 +175,8 @@ class LeaveService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[LeaveService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[LeaveService] Unexpected Error: $e');
-      debugPrint('[LeaveService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

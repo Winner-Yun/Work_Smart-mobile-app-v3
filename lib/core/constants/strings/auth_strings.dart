@@ -1,8 +1,6 @@
 /// Auth strings
 const Map<String, String> authStringsEn = {
   'login_success': 'Login successful!',
-  'username': 'Username',
-  'password': 'Password',
   'invalid_credentials': 'Login failed, please try to log in again.',
   'email_label': "Email Address",
   'developer_mode_alert_title': 'Developer Mode Detected',
@@ -34,8 +32,6 @@ const Map<String, String> authStringsEn = {
 
 const Map<String, String> authStringsKm = {
   'login_success': 'ចូលគណនីជោគជ័យ!',
-  'username': 'ឈ្មោះប្រើប្រាស់',
-  'password': 'ពាក្យសម្ងាត់',
   'invalid_credentials': 'ការចូលគណនីបរាជ័យ សូមព្យាយាមចូលម្តងទៀត។',
   'email_label': "អាសយដ្ឋានអ៊ីមែល",
   'developer_mode_alert_title': 'បានរកឃើញ Developer Mode',

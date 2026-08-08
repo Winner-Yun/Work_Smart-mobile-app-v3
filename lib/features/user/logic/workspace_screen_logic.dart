@@ -93,26 +93,14 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
         workspaces = decoded
             .map((json) => Workspace.fromJson(json as Map<String, dynamic>))
             .toList();
-        debugPrint(
-          '✅ [WorkspaceScreenLogic] Loaded ${workspaces.length} workspaces from local cache',
-        );
-      } catch (e) {
-        debugPrint(
-          '⛔ [WorkspaceScreenLogic] Error parsing cached workspaces: $e',
-        );
-      }
+      } catch (_) {}
     }
 
     final cachedUserJson = prefs.getString(_cacheKeyUser);
     if (cachedUserJson != null) {
       try {
         currentUser = UserModel.fromJson(jsonDecode(cachedUserJson));
-        debugPrint(
-          '✅ [WorkspaceScreenLogic] Loaded user from SharedPreferences: ${currentUser?.name}',
-        );
-      } catch (e) {
-        debugPrint('⛔ [WorkspaceScreenLogic] Error parsing cached user: $e');
-      }
+      } catch (_) {}
     }
 
     if (currentUser == null) {
@@ -120,28 +108,18 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
         final dbProfile = await DatabaseHelper().getUserProfile();
         if (dbProfile != null) {
           currentUser = UserModel.fromJson(dbProfile);
-          debugPrint(
-            '✅ [WorkspaceScreenLogic] Loaded user from SQLite: ${currentUser?.name}',
-          );
           await prefs.setString(
             _cacheKeyUser,
             jsonEncode(currentUser!.toJson()),
           );
         }
-      } catch (e) {
-        debugPrint(
-          '⛔ [WorkspaceScreenLogic] Error loading user profile from DB: $e',
-        );
-      }
+      } catch (_) {}
     }
 
     if (currentUser == null) {
       final localFromLogin = _tryParseUserFromLoginData();
       if (localFromLogin != null) {
         currentUser = localFromLogin;
-        debugPrint(
-          '✅ [WorkspaceScreenLogic] Loaded user from loginData: ${currentUser?.name}',
-        );
         try {
           await prefs.setString(
             _cacheKeyUser,
@@ -171,9 +149,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
       }
       return UserModel.fromJson(candidate);
     } catch (e) {
-      debugPrint(
-        '⛔ [WorkspaceScreenLogic] Error parsing user from loginData: $e',
-      );
       return null;
     }
   }
@@ -212,7 +187,6 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
 
       await _saveToCache();
     } catch (e) {
-      debugPrint('⛔ [WorkspaceScreenLogic] Error loading data: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -240,20 +214,14 @@ abstract class WorkspaceScreenLogic extends State<WorkspaceScreen> {
         await prefs.setString(_cacheKeyUser, jsonEncode(userJson));
         try {
           await DatabaseHelper().saveUserProfile(userJson);
-        } catch (e) {
-          debugPrint(
-            '⛔ [WorkspaceScreenLogic] Error saving user profile to DB: $e',
-          );
-        }
+        } catch (_) {}
       }
 
       await prefs.setInt(
         _cacheKeyTimestamp,
         DateTime.now().millisecondsSinceEpoch,
       );
-    } catch (e) {
-      debugPrint('⛔ [WorkspaceScreenLogic] Error saving cache: $e');
-    }
+    } catch (_) {}
   }
 
   void onWorkspaceSelected(String id) {

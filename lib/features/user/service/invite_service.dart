@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 import 'package:flutter_worksmart_app/shared/model/invite_action_response.dart';
@@ -10,7 +9,6 @@ class InviteService {
 
   Future<InviteResponse> fetchMyInvites({int page = 1, int limit = 10}) async {
     final String endpoint = '${ApiEndpoints.myInvites}?page=$page&limit=$limit';
-    debugPrint('[InviteService] Requesting: $endpoint');
 
     try {
       final Response response = await _apiClient.get(endpoint);
@@ -29,20 +27,14 @@ class InviteService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[InviteService] Unexpected Error: $e');
-      debugPrint('[InviteService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
 
   Future<InviteActionResponse> acceptInvite(String inviteId) async {
     final String endpoint = ApiEndpoints.acceptInvite(inviteId);
-    debugPrint('[InviteService] POST: $endpoint');
 
     try {
       final Response response = await _apiClient.post(endpoint, data: {});
@@ -61,13 +53,8 @@ class InviteService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[InviteService] Unexpected Error: $e');
-      debugPrint('[InviteService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
@@ -75,7 +62,6 @@ class InviteService {
   /// Joins a workspace via a shareable invite code, as opposed to [acceptInvite].
   Future<Map<String, dynamic>> joinByCode(String code) async {
     final String endpoint = ApiEndpoints.joinInviteByCode(code);
-    debugPrint('[InviteService] POST: $endpoint');
 
     try {
       final Response response = await _apiClient.post(endpoint, data: {});
@@ -88,7 +74,6 @@ class InviteService {
         throw Exception('Failed to join workspace');
       }
     } on DioException catch (e) {
-      final statusCode = e.response?.statusCode;
       final dynamic responseData = e.response?.data;
       // This endpoint uses FastAPI-style {"detail": "..."} errors, not {"message": "..."}.
       final String? serverMessage = responseData is Map
@@ -96,25 +81,19 @@ class InviteService {
                 ?.toString()
                 .trim()
           : null;
-      debugPrint(
-        '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       // Surface the backend's own message instead of a generic wrapped network error.
       throw Exception(
         (serverMessage != null && serverMessage.isNotEmpty)
             ? serverMessage
             : 'Failed to join workspace',
       );
-    } catch (e, stackTrace) {
-      debugPrint('[InviteService] Unexpected Error: $e');
-      debugPrint('[InviteService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Failed to join workspace');
     }
   }
 
   Future<InviteActionResponse> rejectInvite(String inviteId) async {
     final String endpoint = ApiEndpoints.rejectInvite(inviteId);
-    debugPrint('[InviteService] PATCH: $endpoint');
 
     try {
       final Response response = await _apiClient.patch(endpoint, data: {});
@@ -133,13 +112,8 @@ class InviteService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[InviteService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[InviteService] Unexpected Error: $e');
-      debugPrint('[InviteService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

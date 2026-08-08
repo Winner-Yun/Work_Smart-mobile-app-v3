@@ -408,9 +408,7 @@ class _RegisterFaceScanScreenState extends RegisterFaceLogic {
         _greenSince = null;
         await takePhoto();
       }
-    } catch (e) {
-      debugPrint('Face validation error: $e');
-    }
+    } catch (_) {}
   }
 
   PreferredSizeWidget _buildMinimalAppBar() {

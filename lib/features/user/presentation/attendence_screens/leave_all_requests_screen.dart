@@ -79,9 +79,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
 
     try {
       await _loadData();
-    } catch (e) {
-      debugPrint('[LeaveAllRequestsScreen] refresh error: $e');
-    } finally {
+    } catch (_) {} finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
       }
@@ -134,7 +132,6 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
           .map((json) => LeaveModel.fromJson(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('[LeaveAllRequestsScreen] Error loading cached leaves: $e');
       return <LeaveModel>[];
     }
   }
@@ -163,9 +160,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
         });
         await _saveCachedLeaves(sorted);
       }
-    } catch (e) {
-      debugPrint('[LeaveAllRequestsScreen] Background refresh failed: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _saveCachedLeaves(List<LeaveModel> data) async {
@@ -177,9 +172,7 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
         '$_cacheKeyPrefix$workspaceId',
         jsonEncode(data.map((e) => e.toJson()).toList()),
       );
-    } catch (e) {
-      debugPrint('[LeaveAllRequestsScreen] Error saving leaves cache: $e');
-    }
+    } catch (_) {}
   }
 
   // Explicit fetch: cold start, pull-to-refresh, and post-delete reloads.
@@ -205,7 +198,6 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       await _saveCachedLeaves(sorted);
     } catch (e) {
       // The list endpoint is known to be unreliable; fail open with an empty list.
-      debugPrint('[LeaveAllRequestsScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }

@@ -213,9 +213,6 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
           .map((e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (e) {
-      debugPrint(
-        '[AnnualLeaveRequestScreen] Failed to parse cached leaves: $e',
-      );
       return null;
     }
   }
@@ -249,7 +246,6 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       await _saveCachedLeaves(workspaceId, newLeavesJson);
     } catch (e) {
       // The list endpoint is unreliable; fail open and keep whatever's held.
-      debugPrint('[AnnualLeaveRequestScreen] Failed to load leaves: $e');
     }
   }
 
@@ -257,9 +253,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_leavesCacheKey(workspaceId), leavesJson);
-    } catch (e) {
-      debugPrint('[AnnualLeaveRequestScreen] Failed to cache leaves: $e');
-    }
+    } catch (_) {}
   }
 
   void _onScroll() {
@@ -283,9 +277,7 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       if (workspaceId != null && workspaceId.isNotEmpty) {
         await _refreshFromServer(workspaceId);
       }
-    } catch (e) {
-      debugPrint('[AnnualLeaveRequestScreen] refresh error: $e');
-    } finally {
+    } catch (_) {} finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
       }
@@ -350,7 +342,6 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       }
     } catch (e) {
       // Policy refresh is best-effort; fall back to whatever is cached.
-      debugPrint('[AnnualLeaveRequestScreen] Failed to refresh policy: $e');
     }
   }
 
@@ -454,7 +445,6 @@ class _AnnualLeaveRequestScreenState extends State<AnnualLeaveRequestScreen> {
       );
       submitted = true;
     } catch (e) {
-      debugPrint('[AnnualLeaveRequestScreen] Submit failed: $e');
       submitted = false;
       submitError = e;
     }

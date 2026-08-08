@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -20,7 +19,6 @@ class PolicyService {
 
   Future<Map<String, dynamic>> fetchPolicy(String workspaceId) async {
     final String endpoint = ApiEndpoints.workspacePolicy(workspaceId);
-    debugPrint('[PolicyService] Requesting: $endpoint');
 
     try {
       final Response response = await _apiClient.get(endpoint);
@@ -39,13 +37,8 @@ class PolicyService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[PolicyService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[PolicyService] Unexpected Error: $e');
-      debugPrint('[PolicyService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

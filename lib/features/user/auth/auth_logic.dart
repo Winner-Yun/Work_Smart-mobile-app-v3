@@ -102,18 +102,14 @@ class AuthLogic {
   // ─────────── GOOGLE SIGN-IN ───────────
   Future<bool> handleGoogleSignIn() async {
     try {
-      debugPrint('--- STARTING GOOGLE SIGN IN FLOW ---');
       await _ensureGoogleSignInInitialized();
 
-      debugPrint('Waiting for user to select Google account...');
       final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
-      debugPrint('Google account selected: ${googleUser.email}');
 
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
       final String? idToken = googleAuth.idToken;
 
       if (idToken == null || idToken.isEmpty) {
-        debugPrint('FAILED: Google ID Token is null or empty');
         _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
         return false;
       }
@@ -131,7 +127,6 @@ class AuthLogic {
       final String? refreshToken = body['refresh_token']?.toString();
 
       if (accessToken == null || accessToken.isEmpty) {
-        debugPrint('FAILED: Access token from backend is null or empty');
         _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
         return false;
       }
@@ -160,9 +155,6 @@ class AuthLogic {
         'display_name': resolvedDisplayName,
       };
 
-      debugPrint(
-        'Saving tokens to local database with User ID: $resolvedUserId',
-      );
       await _databaseHelper.saveCachedLoginWithTokens(
         resolvedDisplayName,
         accessToken,
@@ -176,20 +168,16 @@ class AuthLogic {
 
       _showSuccessSnackBar(AppStrings.tr('login_success'));
 
-      debugPrint('--- LOGIN FLOW COMPLETED SUCCESSFULLY ---');
       return true;
     } on GoogleSignInException catch (e) {
-      debugPrint('GOOGLE SIGN IN EXCEPTION: [${e.code}] ${e.toString()}');
       if (e.code != 'sign_in_canceled' && e.code != 'canceled') {
         _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
       }
       return false;
-    } on DioException catch (e) {
-      debugPrint('DIO API EXCEPTION: ${e.message}');
+    } on DioException {
       _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
       return false;
     } catch (e) {
-      debugPrint('UNKNOWN EXCEPTION CAUGHT: $e');
       _showErrorSnackBar(AppStrings.tr('invalid_credentials'));
       return false;
     }
@@ -205,9 +193,7 @@ class AuthLogic {
         'google_maps_api_key',
         config.googleMapsApiKey,
       );
-    } catch (e) {
-      debugPrint('[AuthLogic] Failed to fetch/cache app config: $e');
-    }
+    } catch (_) {}
   }
 
   /// Registers this device's FCM token with the backend after login.
@@ -217,9 +203,6 @@ class AuthLogic {
       final messaging = FirebaseMessaging.instance;
       await messaging.requestPermission();
       final token = await messaging.getToken();
-      debugPrint('===== FCM TOKEN =====');
-      debugPrint(token);
-      debugPrint('=====================');
 
       if (token == null || token.isEmpty) return;
 
@@ -229,9 +212,7 @@ class AuthLogic {
           'fcm_tokens': [token],
         },
       );
-    } catch (e) {
-      debugPrint('[AuthLogic] Failed to register FCM token: $e');
-    }
+    } catch (_) {}
   }
 
   // ─────────── SENSITIVE-ACTION RE-AUTHENTICATION ───────────

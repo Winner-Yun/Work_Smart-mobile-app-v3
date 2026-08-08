@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -30,7 +29,6 @@ class TaskService {
       if (status != null) 'status': status,
       if (priority != null) 'priority': priority,
     };
-    debugPrint('[TaskService] GET $endpoint');
 
     try {
       final Response response = await _apiClient.get(
@@ -54,13 +52,8 @@ class TaskService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[TaskService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[TaskService] Unexpected Error: $e');
-      debugPrint('[TaskService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
@@ -70,7 +63,6 @@ class TaskService {
     String status,
   ) async {
     final String endpoint = ApiEndpoints.taskStatus(taskId);
-    debugPrint('[TaskService] PATCH $endpoint status=$status');
 
     try {
       final Response response = await _apiClient.patch(
@@ -90,13 +82,8 @@ class TaskService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[TaskService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[TaskService] Unexpected Error: $e');
-      debugPrint('[TaskService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

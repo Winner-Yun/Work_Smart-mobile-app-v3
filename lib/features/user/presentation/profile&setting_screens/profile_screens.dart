@@ -68,9 +68,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         setState(() => _appVersion = '${info.version}+${info.buildNumber}');
       }
-    } catch (e) {
-      debugPrint('[HelpSupportScreen] Failed to load app version: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _handleLanguageChange(String langCode) async {
@@ -146,9 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (changed && mounted) {
         setState(() {});
       }
-    } catch (e) {
-      debugPrint('[ProfileScreen] Failed to load profile from server: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _loadWorkspaceName() async {
@@ -184,9 +180,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       match ??= workspaces.first;
 
       if (mounted) setState(() => _workspaceName = match!.workspaceName);
-    } catch (e) {
-      debugPrint('[ProfileScreen] Failed to load workspace name: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -204,9 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() => _image = croppedFile);
       await _uploadProfileImage(croppedFile);
-    } catch (e) {
-      debugPrint("Error picking image: $e");
-    }
+    } catch (_) {}
   }
 
   Future<File?> _cropProfileImage(String sourcePath) async {
@@ -530,11 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (refreshToken.isNotEmpty) {
         await _userRepo.logout(refreshToken);
       }
-    } catch (e) {
-      debugPrint(
-        '[ProfileScreen] Server logout failed, clearing locally anyway: $e',
-      );
-    } finally {
+    } catch (_) {} finally {
       // Wipe local data even if server logout failed, so the user must log in again.
       await DatabaseHelper().clearAllUserData();
     }

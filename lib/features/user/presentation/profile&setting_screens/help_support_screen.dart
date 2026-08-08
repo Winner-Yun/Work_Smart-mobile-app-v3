@@ -29,9 +29,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       if (mounted) {
         setState(() => _appVersion = '${info.version}+${info.buildNumber}');
       }
-    } catch (e) {
-      debugPrint('[HelpSupportScreen] Failed to load app version: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _handleLanguageChange(String langCode) async {

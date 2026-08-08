@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -8,7 +7,6 @@ class UserService {
 
   Future<Map<String, dynamic>> fetchUserProfile() async {
     const String endpoint = ApiEndpoints.me;
-    debugPrint('[UserService] Requesting: $endpoint');
 
     try {
       final Response response = await _apiClient.get(endpoint);
@@ -30,13 +28,8 @@ class UserService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[UserService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[UserService] Unexpected Error: $e');
-      debugPrint('[UserService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
@@ -45,8 +38,6 @@ class UserService {
     Map<String, dynamic> updates,
   ) async {
     const String endpoint = ApiEndpoints.me;
-    debugPrint('[UserService] PATCH $endpoint');
-    debugPrint('[UserService] Body: $updates');
 
     try {
       final Response response = await _apiClient.patch(endpoint, data: updates);
@@ -67,20 +58,14 @@ class UserService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[UserService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[UserService] Unexpected Error: $e');
-      debugPrint('[UserService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
 
   Future<Map<String, dynamic>> updateAllowNotification(bool allow) async {
     const String endpoint = ApiEndpoints.allowNotification;
-    debugPrint('[UserService] PATCH $endpoint');
 
     try {
       final Response response = await _apiClient.patch(
@@ -104,20 +89,14 @@ class UserService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[UserService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[UserService] Unexpected Error: $e');
-      debugPrint('[UserService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
 
   Future<void> logout(String refreshToken) async {
     const String endpoint = ApiEndpoints.logout;
-    debugPrint('[UserService] POST $endpoint');
 
     try {
       final Response response = await _apiClient.post(
@@ -133,13 +112,8 @@ class UserService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[UserService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[UserService] Unexpected Error: $e');
-      debugPrint('[UserService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

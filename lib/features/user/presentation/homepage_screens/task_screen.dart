@@ -10,6 +10,7 @@ import 'package:flutter_worksmart_app/features/user/presentation/homepage_screen
 import 'package:flutter_worksmart_app/features/user/repository/task_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/task_service.dart';
 import 'package:flutter_worksmart_app/shared/model/task_model.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/sliver_pinned_header_delegate.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/task_skeleton_loading.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -119,7 +120,6 @@ class _TaskScreenState extends State<TaskScreen> {
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return _tasks.isNotEmpty;
     } catch (e) {
-      debugPrint('[TaskScreen] Error parsing cached tasks: $e');
       return false;
     }
   }
@@ -151,7 +151,6 @@ class _TaskScreenState extends State<TaskScreen> {
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      debugPrint('[TaskScreen] Failed to load tasks: $e');
       if (mounted && showLoading) {
         setState(() => _isLoading = false);
       }
@@ -164,9 +163,7 @@ class _TaskScreenState extends State<TaskScreen> {
     if (prefs == null || cacheKey == null) return;
     try {
       await prefs.setString(cacheKey, tasksJson);
-    } catch (e) {
-      debugPrint('[TaskScreen] Error saving tasks cache: $e');
-    }
+    } catch (_) {}
   }
 
   // Swaps to the skeleton instead of the overscroll indicator; clears `_isRefreshing`
@@ -290,9 +287,17 @@ class _TaskScreenState extends State<TaskScreen> {
                     parent: BouncingScrollPhysics(),
                   ),
                   slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      sliver: SliverToBoxAdapter(child: _buildStatsHeader()),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: SliverPinnedHeaderDelegate(
+                        height: 76,
+                        child: Container(
+                          width: double.infinity,
+                          color: Theme.of(context).scaffoldBackgroundColor,
+
+                          child: _buildStatsHeader(),
+                        ),
+                      ),
                     ),
                     if (visibleTasks.isEmpty)
                       SliverFillRemaining(
@@ -309,22 +314,22 @@ class _TaskScreenState extends State<TaskScreen> {
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                         sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              return _buildTaskItem(visibleTasks[index])
-                                  .animate()
-                                  .fadeIn(
-                                    delay: (60 * index).ms,
-                                    duration: 240.ms,
-                                  )
-                                  .slideY(
-                                    begin: 0.08,
-                                    end: 0,
-                                    curve: Curves.easeOut,
-                                  );
-                            },
-                            childCount: visibleTasks.length,
-                          ),
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            return _buildTaskItem(visibleTasks[index])
+                                .animate()
+                                .fadeIn(
+                                  delay: (60 * index).ms,
+                                  duration: 240.ms,
+                                )
+                                .slideY(
+                                  begin: 0.08,
+                                  end: 0,
+                                  curve: Curves.easeOut,
+                                );
+                          }, childCount: visibleTasks.length),
                         ),
                       ),
                   ],
@@ -336,9 +341,7 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   Widget _buildStatsHeader() {
-    final int pendingCount = _tasks
-        .where((t) => t.status == 'pending')
-        .length;
+    final int pendingCount = _tasks.where((t) => t.status == 'pending').length;
     final int inProgressCount = _tasks
         .where((t) => t.status == 'in_progress')
         .length;
@@ -347,7 +350,7 @@ class _TaskScreenState extends State<TaskScreen> {
         .length;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(14),
@@ -397,13 +400,13 @@ class _TaskScreenState extends State<TaskScreen> {
         setState(() => _statusFilter = isSelected ? null : status);
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           children: [
             Text(
               '$count',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -419,7 +422,7 @@ class _TaskScreenState extends State<TaskScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 3),
             AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               height: 3,
@@ -438,7 +441,7 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget _buildStatDivider() {
     return Container(
       width: 1,
-      height: 40,
+      height: 30,
       color: Theme.of(context).dividerColor.withOpacity(0.15),
     );
   }
@@ -527,7 +530,7 @@ class _TaskScreenState extends State<TaskScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  width: 5,
+                  width: 15,
                   decoration: BoxDecoration(
                     color: priorityColor,
                     borderRadius: const BorderRadius.horizontal(

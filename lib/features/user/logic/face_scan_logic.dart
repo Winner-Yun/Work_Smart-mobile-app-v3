@@ -135,9 +135,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
         });
         _ensureValidationLoop();
       }
-    } catch (e) {
-      debugPrint('$e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _showCameraPermissionRequiredDialog({
@@ -268,9 +266,7 @@ abstract class FaceScanLogic extends State<FaceScanScreen>
       if (mounted && !isScanning) {
         takePicture();
       }
-    } catch (e) {
-      debugPrint('Face validation error: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> switchCamera() async {

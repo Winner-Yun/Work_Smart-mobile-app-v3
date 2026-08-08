@@ -10,7 +10,6 @@ mixin _DataLoadingMixin
     try {
       return await DatabaseHelper().getUserProfile();
     } catch (e) {
-      debugPrint('[_loadCachedUserProfile] Error loading from DB: $e');
       return null;
     }
   }
@@ -21,10 +20,7 @@ mixin _DataLoadingMixin
       final UserModel userModel = await userRepository.getUserProfile();
       final Map<String, dynamic> userJson = userModel.toJson();
       await DatabaseHelper().saveUserProfile(userJson);
-      debugPrint('[_fetchAndSaveUserProfile] Saved user profile to local DB');
-    } catch (e) {
-      debugPrint('[_fetchAndSaveUserProfile] Error: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _loadData() async {
@@ -195,9 +191,7 @@ mixin _DataLoadingMixin
           _officeConfigData['policy'] = cachedPolicyMap;
         }
       }
-    } catch (e) {
-      debugPrint('[_loadLocalWorkspaceAndConfig] Error: $e');
-    }
+    } catch (_) {}
   }
 
   // Pure data fetch, no loading-flag side effects — callers control the flag
@@ -296,9 +290,7 @@ mixin _DataLoadingMixin
           }
         }
       }
-    } catch (e) {
-      debugPrint('[_fetchWorkspaceGeofenceAndPolicy] Error: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> onRefresh() async {
@@ -316,9 +308,7 @@ mixin _DataLoadingMixin
       await _loadData();
       await _fetchMyAttendance();
       await setupOfficeMapObjects();
-    } catch (e) {
-      debugPrint('[onRefresh] Error: $e');
-    } finally {
+    } catch (_) {} finally {
       // Must clear both flags even on failure, or pull-to-refresh locks up permanently.
       if (mounted) {
         setState(() {
@@ -360,9 +350,7 @@ mixin _DataLoadingMixin
         await _fetchMyAttendance();
         await setupOfficeMapObjects();
       }
-    } catch (e) {
-      debugPrint('[_loadAllData] background refresh error: $e');
-    } finally {
+    } catch (_) {} finally {
       if (mounted) {
         setState(() {
           isRefreshing = false;
@@ -409,9 +397,7 @@ mixin _DataLoadingMixin
       if (mounted) {
         setState(_syncScanStateFromAttendanceData);
       }
-    } catch (e) {
-      debugPrint('[_fetchMyAttendance] Error: $e');
-    }
+    } catch (_) {}
   }
 
   // --- Getters for UI Consumption ---

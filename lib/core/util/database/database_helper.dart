@@ -10,8 +10,6 @@ class DatabaseHelper {
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
-  static const Duration _defaultSessionDuration = Duration(days: 1);
-
   static Database? _database;
 
   /// =========================
@@ -22,7 +20,7 @@ class DatabaseHelper {
     // Reopen if the cached handle is from an older schema version.
     if (_database != null) {
       final currentVersion = await _database!.getVersion();
-      if (currentVersion < 10) {
+      if (currentVersion < 11) {
         await _database!.close();
         _database = null;
       }
@@ -38,7 +36,8 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 10, // Bumped to 10: added face update history/audit columns
+      version:
+          11, // Bumped to 11: dropped login_cache's unused password/session columns
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE settings (
@@ -51,12 +50,8 @@ class DatabaseHelper {
           CREATE TABLE login_cache (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL,
-            password TEXT NOT NULL,
             user_type TEXT NOT NULL,
             user_id TEXT NOT NULL,
-            session_token TEXT NOT NULL,
-            session_expires_at INTEGER NOT NULL,
-            session_issued_at INTEGER NOT NULL,
             access_token TEXT,
             refresh_token TEXT
           )
@@ -203,6 +198,32 @@ class DatabaseHelper {
             e.toString();
           }
         }
+
+        // New V11 migration: drops login_cache's unused password/session columns.
+        if (oldVersion < 11) {
+          try {
+            await db.execute(
+              'ALTER TABLE login_cache RENAME TO login_cache_old',
+            );
+            await db.execute('''
+              CREATE TABLE login_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                user_type TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                access_token TEXT,
+                refresh_token TEXT
+              )
+            ''');
+            await db.execute('''
+              INSERT INTO login_cache (id, username, user_type, user_id, access_token, refresh_token)
+              SELECT id, username, user_type, user_id, access_token, refresh_token FROM login_cache_old
+            ''');
+            await db.execute('DROP TABLE login_cache_old');
+          } on DatabaseException catch (e) {
+            e.toString();
+          }
+        }
       },
     );
   }
@@ -246,32 +267,22 @@ class DatabaseHelper {
   /// LOGIN CACHE
   /// =========================
 
+  // Session validity is enforced by the access/refresh tokens themselves
+  // (see ApiClient's 401 handler), not by a locally stored session record.
   Future<void> saveCachedLoginWithTokens(
     String username,
     String accessToken,
     String refreshToken,
     String userId,
-    String userType, {
-    DateTime? sessionExpiresAt,
-  }) async {
-    final issuedAt = DateTime.now().toUtc();
-    final expiresAt =
-        (sessionExpiresAt ?? issuedAt.add(_defaultSessionDuration)).toUtc();
-
+    String userType,
+  ) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('username', username);
       await prefs.setString('access_token', accessToken);
       await prefs.setString('refresh_token', refreshToken);
-      await prefs.setString('password', ''); // Compatibility fallback
       await prefs.setString('user_id', userId);
       await prefs.setString('user_type', userType);
-      await prefs.remove('session_token');
-      await prefs.setInt(
-        'session_expires_at',
-        expiresAt.millisecondsSinceEpoch,
-      );
-      await prefs.setInt('session_issued_at', issuedAt.millisecondsSinceEpoch);
     } else {
       final db = await database;
       await db!.delete('login_cache');
@@ -279,12 +290,8 @@ class DatabaseHelper {
         'username': username,
         'access_token': accessToken,
         'refresh_token': refreshToken,
-        'password': '', // Compatibility fallback
         'user_id': userId,
         'user_type': userType,
-        'session_token': '',
-        'session_expires_at': expiresAt.millisecondsSinceEpoch,
-        'session_issued_at': issuedAt.millisecondsSinceEpoch,
       });
     }
   }
@@ -312,9 +319,7 @@ class DatabaseHelper {
       final userId = prefs.getString('user_id');
       final userType = prefs.getString('user_type');
 
-      // Look for access_token first, fallback to old password field
-      final accessToken =
-          prefs.getString('access_token') ?? prefs.getString('password');
+      final accessToken = prefs.getString('access_token');
       final refreshToken = prefs.getString('refresh_token');
 
       if (username == null ||
@@ -328,11 +333,8 @@ class DatabaseHelper {
         'username': username,
         'access_token': accessToken,
         'refresh_token': refreshToken,
-        'password': accessToken, // For backward compatibility
         'user_id': userId,
         'user_type': userType,
-        'session_expires_at': prefs.getInt('session_expires_at'),
-        'session_issued_at': prefs.getInt('session_issued_at'),
       };
     } else {
       final db = await database;
@@ -340,8 +342,6 @@ class DatabaseHelper {
 
       if (maps.isNotEmpty) {
         rawCache = Map<String, dynamic>.from(maps.first);
-        // Fallback for mobile
-        rawCache['access_token'] ??= rawCache['password'];
       }
     }
 
@@ -353,11 +353,12 @@ class DatabaseHelper {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('username');
-      await prefs.remove('password');
       await prefs.remove('access_token');
       await prefs.remove('refresh_token');
       await prefs.remove('user_id');
       await prefs.remove('user_type');
+      // One-time cleanup of keys written by older app versions.
+      await prefs.remove('password');
       await prefs.remove('session_token');
       await prefs.remove('session_expires_at');
       await prefs.remove('session_issued_at');
@@ -405,7 +406,6 @@ class DatabaseHelper {
       try {
         return Map<String, dynamic>.from(jsonDecode(profileJson));
       } catch (e) {
-        debugPrint('Failed to decode cached user profile: $e');
         return null;
       }
     } else {
@@ -416,7 +416,6 @@ class DatabaseHelper {
       try {
         return Map<String, dynamic>.from(jsonDecode(profileJson));
       } catch (e) {
-        debugPrint('Failed to decode cached user profile: $e');
         return null;
       }
     }
@@ -469,7 +468,6 @@ class DatabaseHelper {
       try {
         return Map<String, dynamic>.from(jsonDecode(policyJson));
       } catch (e) {
-        debugPrint('Failed to decode cached policy: $e');
         return null;
       }
     } else {
@@ -485,7 +483,6 @@ class DatabaseHelper {
           jsonDecode(maps.first['policy_data'] as String),
         );
       } catch (e) {
-        debugPrint('Failed to decode cached policy: $e');
         return null;
       }
     }
@@ -526,33 +523,6 @@ class DatabaseHelper {
       return null;
     }
 
-    final nowUtc = DateTime.now().toUtc();
-    var sessionExpiresAt = _toInt(rawCache['session_expires_at']);
-
-    if (sessionExpiresAt == null) {
-      sessionExpiresAt = nowUtc
-          .add(_defaultSessionDuration)
-          .millisecondsSinceEpoch;
-
-      // Re-save to establish expiration
-      await saveCachedLoginWithTokens(
-        username,
-        accessToken,
-        refreshToken ?? '',
-        userId,
-        userType,
-        sessionExpiresAt: DateTime.fromMillisecondsSinceEpoch(
-          sessionExpiresAt,
-          isUtc: true,
-        ),
-      );
-    }
-
-    if (sessionExpiresAt <= nowUtc.millisecondsSinceEpoch) {
-      await clearCachedLogin();
-      return null;
-    }
-
     return {
       'username': username,
       'access_token': accessToken,
@@ -560,16 +530,7 @@ class DatabaseHelper {
       'password': accessToken, // Backward compatibility
       'user_id': userId,
       'user_type': userType,
-      'session_expires_at': sessionExpiresAt,
-      'session_issued_at': _toInt(rawCache['session_issued_at']),
     };
-  }
-
-  int? _toInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
   }
 
   /// =========================

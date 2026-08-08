@@ -113,11 +113,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
       _userAttendanceRecords = decoded
           .map((e) => AttendanceModel.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (e) {
-      debugPrint(
-        '⛔ [AttendanceCalendarScreen] Error parsing cached attendance: $e',
-      );
-    }
+    } catch (_) {}
   }
 
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
@@ -169,9 +165,6 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
           ),
         );
       } else {
-        debugPrint(
-          '⛔ [AttendanceCalendarScreen] Background refresh failed: $error',
-        );
       }
     }
   }
@@ -194,9 +187,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
         _cacheKey,
         jsonEncode(records.map((e) => e.toJson()).toList()),
       );
-    } catch (e) {
-      debugPrint('⛔ [AttendanceCalendarScreen] Error saving cache: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _downloadAttendanceProof() async {

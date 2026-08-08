@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -30,7 +29,6 @@ class RequestService {
       'limit': limit,
       if (status != null) 'status': status,
     };
-    debugPrint('[RequestService] GET $endpoint');
 
     try {
       final Response response = await _apiClient.get(
@@ -54,13 +52,8 @@ class RequestService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[RequestService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[RequestService] Unexpected Error: $e');
-      debugPrint('[RequestService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
@@ -84,7 +77,6 @@ class RequestService {
     }
     final FormData formData = FormData.fromMap(fields);
 
-    debugPrint('[RequestService] POST $endpoint');
 
     try {
       final Response response = await _apiClient.post(endpoint, data: formData);
@@ -101,13 +93,8 @@ class RequestService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[RequestService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[RequestService] Unexpected Error: $e');
-      debugPrint('[RequestService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

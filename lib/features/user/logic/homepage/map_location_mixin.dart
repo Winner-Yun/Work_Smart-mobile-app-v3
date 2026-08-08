@@ -80,9 +80,7 @@ mixin _MapLocationMixin on _HomePageLogicState {
           ),
         );
       });
-    } catch (e) {
-      debugPrint("Error loading map pin asset: $e");
-    }
+    } catch (_) {}
   }
 
   Future<void> generateProfileMarker() async {
@@ -140,9 +138,7 @@ mixin _MapLocationMixin on _HomePageLogicState {
         });
         refreshUserMarker();
       }
-    } catch (e) {
-      debugPrint("Error generating user marker: $e");
-    }
+    } catch (_) {}
   }
 
   Future<void> initLocationTracking({
@@ -169,9 +165,7 @@ mixin _MapLocationMixin on _HomePageLogicState {
         desiredAccuracy: LocationAccuracy.high,
       );
       updateMapState(initialPosition);
-    } catch (e) {
-      debugPrint("Location service error: $e");
-    }
+    } catch (_) {}
 
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
@@ -203,11 +197,8 @@ mixin _MapLocationMixin on _HomePageLogicState {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
-        debugPrint("Could not launch $url");
       }
-    } catch (e) {
-      debugPrint("Error launching maps: $e");
-    }
+    } catch (_) {}
   }
 
   void updateMapState(Position userPos) {

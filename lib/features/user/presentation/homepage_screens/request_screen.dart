@@ -12,6 +12,7 @@ import 'package:flutter_worksmart_app/features/user/repository/request_repositor
 import 'package:flutter_worksmart_app/features/user/service/request_service.dart';
 import 'package:flutter_worksmart_app/shared/model/request_model.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/request_skeleton_loading.dart';
+import 'package:flutter_worksmart_app/shared/widget/common/sliver_pinned_header_delegate.dart';
 import 'package:flutter_worksmart_app/shared/widget/common/task_icon_button.dart';
 import 'package:flutter_worksmart_app/shared/widget/user/data_empty_state.dart';
 import 'package:image_picker/image_picker.dart';
@@ -129,7 +130,6 @@ class _RequestScreenState extends State<RequestScreen> {
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return _requests.isNotEmpty;
     } catch (e) {
-      debugPrint('[RequestScreen] Error parsing cached requests: $e');
       return false;
     }
   }
@@ -161,7 +161,6 @@ class _RequestScreenState extends State<RequestScreen> {
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      debugPrint('[RequestScreen] Failed to load requests: $e');
       if (mounted && showLoading) {
         setState(() => _isLoading = false);
       }
@@ -174,9 +173,7 @@ class _RequestScreenState extends State<RequestScreen> {
     if (prefs == null || cacheKey == null) return;
     try {
       await prefs.setString(cacheKey, requestsJson);
-    } catch (e) {
-      debugPrint('[RequestScreen] Error saving requests cache: $e');
-    }
+    } catch (_) {}
   }
 
   // Swaps to the skeleton instead of the overscroll indicator; clears `_isRefreshing`
@@ -305,9 +302,17 @@ class _RequestScreenState extends State<RequestScreen> {
                     parent: BouncingScrollPhysics(),
                   ),
                   slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                      sliver: SliverToBoxAdapter(child: _buildStatsHeader()),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: SliverPinnedHeaderDelegate(
+                        height: 76,
+                        child: Container(
+                          width: double.infinity,
+                          color: Theme.of(context).scaffoldBackgroundColor,
+
+                          child: _buildStatsHeader(),
+                        ),
+                      ),
                     ),
                     if (visibleRequests.isEmpty)
                       SliverFillRemaining(
@@ -365,7 +370,7 @@ class _RequestScreenState extends State<RequestScreen> {
         .length;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(14),
@@ -424,13 +429,13 @@ class _RequestScreenState extends State<RequestScreen> {
         setState(() => _statusFilter = isSelected ? null : status);
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           children: [
             Text(
               '$count',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -446,7 +451,7 @@ class _RequestScreenState extends State<RequestScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 3),
             AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               height: 3,
@@ -465,7 +470,7 @@ class _RequestScreenState extends State<RequestScreen> {
   Widget _buildStatDivider() {
     return Container(
       width: 1,
-      height: 40,
+      height: 30,
       color: Theme.of(context).dividerColor.withOpacity(0.15),
     );
   }
@@ -639,10 +644,7 @@ class _RequestScreenState extends State<RequestScreen> {
                     ).colorScheme.primary.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(10),
                     border: Border(
-                      left: BorderSide(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 3,
-                      ),
+                      left: BorderSide(color: statusColor, width: 3),
                     ),
                   ),
                   child: Text(

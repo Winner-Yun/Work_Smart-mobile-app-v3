@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 /// Face validation helper
@@ -60,7 +59,6 @@ class FaceDetectionUtil {
 
       return null; // All checks passed
     } catch (e) {
-      debugPrint('Face validation error: $e');
       return 'face_validation_error';
     }
   }
@@ -72,7 +70,6 @@ class FaceDetectionUtil {
       final inputImage = InputImage.fromFilePath(imageFile.path);
       return await faceDetector.processImage(inputImage);
     } catch (e) {
-      debugPrint('Face detection error: $e');
       return <Face>[];
     } finally {
       await faceDetector.close();
@@ -91,7 +88,6 @@ class FaceDetectionUtil {
       codec.dispose();
       return size;
     } catch (e) {
-      debugPrint('Image size read error: $e');
       return const Size(1080, 1920);
     }
   }
@@ -185,7 +181,6 @@ class FaceDetectionUtil {
 
       return false;
     } catch (e) {
-      debugPrint('Light pollution detection error: $e');
       return false;
     }
   }

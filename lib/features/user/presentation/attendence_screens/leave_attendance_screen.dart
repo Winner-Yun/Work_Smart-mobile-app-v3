@@ -152,9 +152,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       await _saveCachedLeaves(prefs, workspaceId, fetchedLeaves);
     } catch (e) {
       // Best-effort; the cache-first data already on screen stays put.
-      debugPrint(
-        '[LeaveAttendanceScreen] Background leave refresh failed: $e',
-      );
     }
   }
 
@@ -170,9 +167,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
           .map((e) => LeaveModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint(
-        '[LeaveAttendanceScreen] Failed to decode cached leaves: $e',
-      );
       return null;
     }
   }
@@ -215,7 +209,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       await _saveCachedLeaves(prefs, _workspaceId!, leaves);
     } catch (e) {
       // The list endpoint is unreliable; fail open with an empty list.
-      debugPrint('[LeaveAttendanceScreen] Failed to load leaves: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -285,7 +278,6 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       });
     } catch (e) {
       // Policy refresh is best-effort; fall back to whatever is cached.
-      debugPrint('[LeaveAttendanceScreen] Failed to refresh policy: $e');
     }
   }
 

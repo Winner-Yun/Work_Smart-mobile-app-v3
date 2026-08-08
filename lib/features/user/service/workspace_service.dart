@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -18,9 +17,6 @@ class WorkspaceService {
       'only_member': onlyMember,
     };
 
-    debugPrint('--------------------------------------------------');
-    debugPrint(' [WorkspaceService] GET $endpoint');
-    debugPrint(' [WorkspaceService] Query Params: $queryParams');
 
     try {
       final Response response = await _apiClient.get(
@@ -28,9 +24,6 @@ class WorkspaceService {
         queryParameters: queryParams,
       );
 
-      debugPrint(' [WorkspaceService] Status Code: ${response.statusCode}');
-      debugPrint(' [WorkspaceService] Response Data: ${response.data}');
-      debugPrint('--------------------------------------------------');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = response.data;
@@ -38,16 +31,29 @@ class WorkspaceService {
       } else {
         throw Exception('Server returned status code: ${response.statusCode}');
       }
-    } on DioException catch (e) {
-      debugPrint(' [WorkspaceService] DioException Caught!');
-      debugPrint('   • Request URI: ${e.requestOptions.uri}');
-      debugPrint('   • Status Code: ${e.response?.statusCode}');
-      debugPrint('   • Response Data: ${e.response?.data}');
-      debugPrint('--------------------------------------------------');
+    } on DioException {
       rethrow;
     } catch (e) {
-      debugPrint('[WorkspaceService] Unexpected Error: $e');
       rethrow;
+    }
+  }
+
+  Future<int?> fetchWorkspaceMemberCount(String workspaceId) async {
+    final String endpoint = ApiEndpoints.workspaceMembers(workspaceId);
+
+    try {
+      final Response response = await _apiClient.get(endpoint);
+      if (response.statusCode != 200) return null;
+
+      final dynamic data = response.data;
+      if (data is! Map<String, dynamic>) return null;
+
+      final dynamic total = data['total'];
+      if (total is int) return total;
+      if (total is num) return total.toInt();
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 }

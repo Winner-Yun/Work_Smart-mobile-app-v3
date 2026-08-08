@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -62,8 +61,6 @@ class AttendanceService {
       if (status != null) 'status': status,
       if (dateFilter != null) 'date_filter': dateFilter,
     };
-    debugPrint('[AttendanceService] GET $endpoint');
-    debugPrint('[AttendanceService] Query Params: $queryParams');
 
     try {
       final Response response = await _apiClient.get(
@@ -71,8 +68,6 @@ class AttendanceService {
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
 
-      debugPrint('[AttendanceService] Status Code: ${response.statusCode}');
-      debugPrint('[AttendanceService] Response Data: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -90,13 +85,8 @@ class AttendanceService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[AttendanceService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[AttendanceService] Unexpected Error: $e');
-      debugPrint('[AttendanceService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }
@@ -118,14 +108,10 @@ class AttendanceService {
       'mock_location_detected': mockLocationDetected,
     };
 
-    debugPrint('[AttendanceService] POST $endpoint');
-    debugPrint('[AttendanceService] Body: $body');
 
     try {
       final Response response = await _apiClient.post(endpoint, data: body);
 
-      debugPrint('[AttendanceService] Status Code: ${response.statusCode}');
-      debugPrint('[AttendanceService] Response Data: ${response.data}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data;
@@ -143,13 +129,8 @@ class AttendanceService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[AttendanceService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[AttendanceService] Unexpected Error: $e');
-      debugPrint('[AttendanceService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

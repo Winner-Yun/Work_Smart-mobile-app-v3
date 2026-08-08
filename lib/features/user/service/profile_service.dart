@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -10,7 +9,6 @@ class ProfileService {
 
   Future<Map<String, dynamic>> updateProfileImage(File imageFile) async {
     final String endpoint = ApiEndpoints.updateProfileImage;
-    debugPrint('[ProfileService] Requesting: $endpoint');
 
     try {
       // Create FormData with the image file matching key 'image'
@@ -40,13 +38,8 @@ class ProfileService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = e.response?.data?['message'] ?? e.message;
-      debugPrint(
-        '[ProfileService] DioError: $statusCode - $serverMessage | Endpoint: $endpoint',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[ProfileService] Unexpected Error: $e');
-      debugPrint('[ProfileService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

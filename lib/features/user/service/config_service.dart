@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_worksmart_app/config/api/api_client.dart';
 import 'package:flutter_worksmart_app/config/api/api_endpoints.dart';
 
@@ -19,7 +18,6 @@ class ConfigService {
   }
 
   Future<Map<String, dynamic>> fetchConfig() async {
-    debugPrint('[ConfigService] Requesting: ${ApiEndpoints.configData}');
 
     try {
       final Response response = await _apiClient.get(ApiEndpoints.configData);
@@ -40,13 +38,8 @@ class ConfigService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       final serverMessage = _extractServerMessage(e.response?.data, e.message);
-      debugPrint(
-        '[ConfigService] DioError: $statusCode - $serverMessage | Endpoint: ${ApiEndpoints.configData}',
-      );
       throw Exception('Network error [$statusCode]: $serverMessage');
-    } catch (e, stackTrace) {
-      debugPrint('[ConfigService] Unexpected Error: $e');
-      debugPrint('[ConfigService] StackTrace: $stackTrace');
+    } catch (e) {
       throw Exception('Unexpected error: $e');
     }
   }

@@ -159,7 +159,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       await _saveCachedLeaves(prefs, workspaceId, fetchedLeaves);
     } catch (e) {
       // Best-effort: on failure, the cache-first data already shown stays put.
-      debugPrint('[LeaveDetailScreen] Background leave refresh failed: $e');
     }
   }
 
@@ -175,7 +174,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
           .map((e) => LeaveModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('[LeaveDetailScreen] Failed to decode cached leaves: $e');
       return null;
     }
   }
@@ -217,7 +215,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
       await _saveCachedLeaves(prefs, _workspaceId!, leaves);
     } catch (e) {
       // The list endpoint is known to be unreliable; fail open with an empty list.
-      debugPrint('[LeaveDetailScreen] Failed to load leaves: $e');
       if (mounted) {
         setState(() {
           _leaveRecords = <LeaveModel>[];
@@ -284,9 +281,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
         _annualRatio = (_annualUsed / _annualTotal).clamp(0, 1).toDouble();
         _sickRatio = (_sickUsed / _sickTotal).clamp(0, 1).toDouble();
       });
-    } catch (e) {
-      debugPrint('[LeaveDetailScreen] Failed to refresh policy: $e');
-    }
+    } catch (_) {}
   }
 
   // Guarded so one pull only triggers one refresh; clears _isRefreshing in finally
@@ -299,9 +294,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
     try {
       await _fetchPolicyFromServer();
       await _loadData();
-    } catch (e) {
-      debugPrint('[LeaveDetailScreen] refresh error: $e');
-    } finally {
+    } catch (_) {} finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
       }
@@ -999,7 +992,6 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen>
         _refreshLeaveDataWithAnimation();
       });
     } catch (error) {
-      debugPrint('Failed to open leaveAllRequestsScreen: $error');
       if (!mounted) return;
 
       final bool? fallbackResult = await Navigator.push<bool>(

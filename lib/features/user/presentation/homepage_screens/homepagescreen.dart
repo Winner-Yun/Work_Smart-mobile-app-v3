@@ -153,14 +153,22 @@ class _HomePageScreenState extends HomePageLogic {
                         _buildWorkspaceInfoCard(
                           context,
                         ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.1),
-                        const SizedBox(height: 16),
-                        _buildDateAndStatusRow().animate().fadeIn(
-                          duration: 400.ms,
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTimeAttendanceSection(
-                          context,
-                        ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+                        // Check-in-only policies show the date/late chip inside
+                        // the card itself instead of this standalone row.
+                        if (requiresCheckOut) ...[
+                          const SizedBox(height: 16),
+                          _buildDateAndStatusRow().animate().fadeIn(
+                            duration: 400.ms,
+                          ),
+                        ],
+                        // Hidden until the policy/geofence finish loading, since
+                        // check-in/check-out times depend on the real policy data.
+                        if (isWorkspaceSetupReady) ...[
+                          const SizedBox(height: 20),
+                          _buildTimeAttendanceSection(
+                            context,
+                          ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+                        ],
                         const SizedBox(height: 20),
 
                         if (hasLocalFaceEmbedding)
@@ -265,10 +273,6 @@ class _HomePageScreenState extends HomePageLogic {
             theme.cardTheme.color ??
             (isDark ? Colors.grey.shade900 : Colors.white),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: primaryColor.withValues(alpha: 0.25),
-          width: 1.5,
-        ),
         boxShadow: [
           BoxShadow(
             color: primaryColor.withValues(alpha: 0.06),
@@ -467,7 +471,10 @@ class _HomePageScreenState extends HomePageLogic {
     final bool isDeadlineBlocked = isAttendanceScanBlockedByDeadline;
 
     final bool canScanAttendance =
-        isInRange && !isSelectedScanCompleted && !isScanCooldownActive;
+        isInRange &&
+        !isSelectedScanCompleted &&
+        !isScanCooldownActive &&
+        !isBeforeCheckInWindow;
 
     String getFormattedDistance(String statusText) {
       if (!statusText.contains("m")) return "--";
@@ -913,8 +920,8 @@ class _HomePageScreenState extends HomePageLogic {
               const SizedBox(width: 8),
               Text(
                 requiresCheckOut
-                    ? 'Check-out deadline reached'
-                    : 'Check-in deadline reached',
+                    ? AppStrings.tr('check_out_deadline_reached')
+                    : AppStrings.tr('check_in_deadline_reached'),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -925,7 +932,7 @@ class _HomePageScreenState extends HomePageLogic {
           ),
           const SizedBox(height: 10),
           Text(
-            'Scan deadline: $checkOutDeadlineLabel',
+            '${AppStrings.tr('scan_deadline_short')} $checkOutDeadlineLabel',
             style: TextStyle(
               color: Theme.of(context).textTheme.bodyMedium?.color,
               fontWeight: FontWeight.w600,
@@ -933,9 +940,7 @@ class _HomePageScreenState extends HomePageLogic {
           ),
           const SizedBox(height: 6),
           Text(
-            requiresCheckOut
-                ? 'Deadline is counted from end time + $deadlineScanMinutes minutes. Map scan is disabled after deadline.'
-                : 'Deadline is counted from check-in start + $deadlineScanMinutes minutes. Map scan is disabled after deadline.',
+            AppStrings.tr('deadline_absent_notice'),
             style: const TextStyle(color: AppColors.textGrey, fontSize: 13),
           ),
         ],
@@ -1222,6 +1227,8 @@ class _HomePageScreenState extends HomePageLogic {
     final primaryColor = theme.colorScheme.primary;
     final String checkInTime = currentAttendance['check_in'] ?? "--:--";
     final bool isCheckedIn = isSelectedScanCompleted;
+    final String lateStart = lateStartTimeLabel;
+    final bool hasLateStart = lateStart != '--:--';
 
     return InkWell(
       onTap: () => selectAttendanceScanType('check_in'),
@@ -1232,10 +1239,6 @@ class _HomePageScreenState extends HomePageLogic {
         decoration: BoxDecoration(
           color: theme.cardTheme.color,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: primaryColor.withOpacity(isCheckedIn ? 0.5 : 0.2),
-            width: isCheckedIn ? 2 : 1.5,
-          ),
           boxShadow: [
             BoxShadow(
               color: primaryColor.withOpacity(0.06),
@@ -1332,6 +1335,32 @@ class _HomePageScreenState extends HomePageLogic {
                       ),
                     ],
                   ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Divider(height: 1, color: primaryColor.withOpacity(0.12)),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    currentAttendance['date'] ?? AppStrings.tr('mock_date'),
+                    style: const TextStyle(
+                      color: AppColors.textGrey,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildPolicyInfoChip(
+                  icon: hasLateStart
+                      ? Icons.alarm_outlined
+                      : Icons.shield_outlined,
+                  label: hasLateStart
+                      ? '${AppStrings.tr('late')} ${AppStrings.tr('at')} $lateStart'
+                      : AppStrings.tr('safety'),
                 ),
               ],
             ),

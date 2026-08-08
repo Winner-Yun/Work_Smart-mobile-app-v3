@@ -218,7 +218,24 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
     return !DateTime.now().isBefore(deadlineAt);
   }
 
-  bool get isAttendanceScanDisabled => isAttendanceScanBlockedByDeadline;
+  bool get isBeforeCheckInWindow {
+    if (selectedAttendanceScanType != 'check_in') return false;
+    if (_isTypeCompleted('check_in')) return false;
+
+    final DateTime? windowStart = _parse12hTime(officeCheckInTime);
+    if (windowStart == null) return false;
+
+    return DateTime.now().isBefore(windowStart);
+  }
+
+  String get checkInWindowStartLabel {
+    final DateTime? windowStart = _parse12hTime(officeCheckInTime);
+    if (windowStart == null) return '--:--';
+    return _formatDateTimeTo12Hour(windowStart);
+  }
+
+  bool get isAttendanceScanDisabled =>
+      isAttendanceScanBlockedByDeadline || isBeforeCheckInWindow;
 
   bool get shouldShowCheckOutDeadlineCard =>
       !hasMockScanSuccess && isCheckOutScanDeadlineReached;
@@ -242,6 +259,8 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
 
   String get selectedAttendanceActionText => isScanCooldownActive
       ? '${AppStrings.tr('wait')} ${_formatCooldownDuration(checkOutCooldownSeconds)}'
+      : isBeforeCheckInWindow
+      ? '${AppStrings.tr('check_in')} ${AppStrings.tr('opens_at')} $checkInWindowStartLabel'
       : isAttendanceScanBlockedByDeadline
       ? '${AppStrings.tr('check_out')} ${AppStrings.tr('deadline_passed')}'
       : isSelectedScanCompleted

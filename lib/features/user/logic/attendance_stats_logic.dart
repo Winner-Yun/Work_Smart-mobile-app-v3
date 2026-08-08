@@ -122,11 +122,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
       userAttendanceRecords = decoded
           .map((e) => AttendanceModel.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (e) {
-      debugPrint(
-        '⛔ [AttendanceStatsLogic] Error parsing cached attendance: $e',
-      );
-    }
+    } catch (_) {}
   }
 
   Future<void> _fetchFromNetwork({required bool showLoading}) async {
@@ -165,7 +161,6 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
         await _saveToCache(fetchedRecords);
       }
     } catch (e) {
-      debugPrint("Load error: $e");
       if (!mounted) return;
       setState(() {
         isLoading = false;
@@ -191,9 +186,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
         _cacheKey,
         jsonEncode(records.map((e) => e.toJson()).toList()),
       );
-    } catch (e) {
-      debugPrint('⛔ [AttendanceStatsLogic] Error saving cache: $e');
-    }
+    } catch (_) {}
   }
 
   /// Recomputes monthlyStats/selectedYear/selectedMonthIndex from userAttendanceRecords.
@@ -228,9 +221,7 @@ abstract class AttendanceStatsLogic extends State<AttendanceStatsScreen> {
 
     try {
       await _fetchFromNetwork(showLoading: false);
-    } catch (e) {
-      debugPrint('[AttendanceStatsLogic] refresh error: $e');
-    } finally {
+    } catch (_) {} finally {
       if (mounted) {
         setState(() => isRefreshing = false);
       }

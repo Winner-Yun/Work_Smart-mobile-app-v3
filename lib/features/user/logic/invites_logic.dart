@@ -78,7 +78,6 @@ abstract class InvitesLogic extends State<InvitesScreen> {
           .map((json) => Invite.fromJson(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('[InvitesLogic] Error loading cached invites: $e');
       return <Invite>[];
     }
   }
@@ -90,9 +89,7 @@ abstract class InvitesLogic extends State<InvitesScreen> {
         _cacheKeyInvitesPage1,
         jsonEncode(data.map((e) => e.toJson()).toList()),
       );
-    } catch (e) {
-      debugPrint('[InvitesLogic] Error saving invites cache: $e');
-    }
+    } catch (_) {}
   }
 
   bool _hasInvitesChanged(List<Invite> newData) {
@@ -171,7 +168,6 @@ abstract class InvitesLogic extends State<InvitesScreen> {
     } catch (e) {
       if (!mounted) return;
       if (silent) {
-        debugPrint('[InvitesLogic] Background refresh failed: $e');
         return;
       }
       setState(() => isLoading = false);

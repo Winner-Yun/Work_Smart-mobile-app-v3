@@ -127,7 +127,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
           .map((e) => LeaveModel.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (e) {
-      debugPrint('[SickLeaveRequestScreen] Failed to parse cached leaves: $e');
       return null;
     }
   }
@@ -161,7 +160,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       await _saveCachedLeaves(workspaceId, newLeavesJson);
     } catch (e) {
       // The list endpoint is unreliable; fail open and keep whatever's held.
-      debugPrint('[SickLeaveRequestScreen] Failed to load leaves: $e');
     }
   }
 
@@ -169,9 +167,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_leavesCacheKey(workspaceId), leavesJson);
-    } catch (e) {
-      debugPrint('[SickLeaveRequestScreen] Failed to cache leaves: $e');
-    }
+    } catch (_) {}
   }
 
   void _onScroll() {
@@ -195,9 +191,7 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       if (workspaceId != null && workspaceId.isNotEmpty) {
         await _refreshFromServer(workspaceId);
       }
-    } catch (e) {
-      debugPrint('[SickLeaveRequestScreen] refresh error: $e');
-    } finally {
+    } catch (_) {} finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
       }
@@ -262,7 +256,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       }
     } catch (e) {
       // Policy refresh is best-effort; fall back to whatever is cached.
-      debugPrint('[SickLeaveRequestScreen] Failed to refresh policy: $e');
     }
   }
 
@@ -375,7 +368,6 @@ class _SickLeaveRequestScreenState extends State<SickLeaveRequestScreen> {
       );
       submitted = true;
     } catch (e) {
-      debugPrint('[SickLeaveRequestScreen] Submit failed: $e');
       submitted = false;
       submitError = e;
     }

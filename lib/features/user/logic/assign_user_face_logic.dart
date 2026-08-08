@@ -132,9 +132,6 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
         setState(() => isCameraInitialized = true);
         return;
       } catch (e) {
-        debugPrint(
-          '[RegisterFaceLogic] Camera init attempt $attempt/$maxAttempts failed: $e',
-        );
         try {
           await candidate.dispose();
         } catch (_) {}
@@ -384,14 +381,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
           await DatabaseHelper().saveFaceEmbeddingWithHistory(userId, {
             'face_embeddings': embeddingVector,
           });
-          debugPrint(
-            '[RegisterFaceLogic] Saved face embedding to local DB for $userId',
-          );
-        } catch (e) {
-          debugPrint(
-            '[RegisterFaceLogic] Failed to cache embedding locally: $e',
-          );
-        }
+        } catch (_) {}
       }
 
       // Dismiss the dialog once the backend processing is complete
@@ -494,11 +484,7 @@ abstract class RegisterFaceLogic extends State<RegisterFaceScanScreen>
     try {
       await _profileRepository.updateProfileImage(localFaceFile);
 
-      debugPrint(
-        '[RegisterFaceLogic] Profile image updated successfully via backend',
-      );
     } catch (e) {
-      debugPrint('[RegisterFaceLogic] Failed to update profile image: $e');
       rethrow;
     }
   }
