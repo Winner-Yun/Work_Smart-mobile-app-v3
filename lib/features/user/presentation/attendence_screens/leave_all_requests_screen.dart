@@ -279,8 +279,9 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
         _selectedForRemoveRequestId = null;
         _isRemoveMode = false;
         _hasDeletedLeaveRequest = true;
-        _loadData();
+        _isLoading = true;
       });
+      await _loadData();
     }
   }
 
@@ -296,8 +297,9 @@ class _LeaveAllRequestsScreenState extends State<LeaveAllRequestsScreen> {
       _selectedForRemoveRequestId = null;
       _isRemoveMode = false;
       _hasDeletedLeaveRequest = true;
-      _loadData();
+      _isLoading = true;
     });
+    await _loadData();
   }
 
   void _popWithResult() {

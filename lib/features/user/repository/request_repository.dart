@@ -53,4 +53,8 @@ class RequestRepository {
     );
     return RequestModel.fromJson(json);
   }
+
+  Future<void> deleteRequest(String requestId) {
+    return _service.deleteRequest(requestId);
+  }
 }

@@ -474,7 +474,8 @@ class _HomePageScreenState extends HomePageLogic {
         isInRange &&
         !isSelectedScanCompleted &&
         !isScanCooldownActive &&
-        !isBeforeCheckInWindow;
+        !isBeforeCheckInWindow &&
+        !isTodayHoliday;
 
     String getFormattedDistance(String statusText) {
       if (!statusText.contains("m")) return "--";
@@ -680,7 +681,9 @@ class _HomePageScreenState extends HomePageLogic {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            isDeadlineBlocked
+                            isTodayHoliday
+                                ? todayHolidayLabel
+                                : isDeadlineBlocked
                                 ? AppStrings.tr('deadline_passed')
                                 : isInRange
                                 ? AppStrings.tr('ready_to_scan')
@@ -692,7 +695,9 @@ class _HomePageScreenState extends HomePageLogic {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
-                              color: isInRange
+                              color: isTodayHoliday
+                                  ? Colors.orange
+                                  : isInRange
                                   ? Theme.of(context).colorScheme.primary
                                   : Colors.red,
                             ),

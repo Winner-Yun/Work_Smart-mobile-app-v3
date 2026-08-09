@@ -348,8 +348,9 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       setState(() {
         _selectedForRemoveRequestId = null;
         _isRemoveMode = false;
-        _loadData();
+        _isLoading = true;
       });
+      await _loadData();
     }
   }
 
@@ -364,8 +365,9 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     setState(() {
       _selectedForRemoveRequestId = null;
       _isRemoveMode = false;
-      _loadData();
+      _isLoading = true;
     });
+    await _loadData();
   }
 
   Future<void> _openLeaveRequest(String routeName) async {
@@ -389,8 +391,9 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
     setState(() {
       _selectedForRemoveRequestId = null;
       _isRemoveMode = false;
-      _loadData();
+      _isLoading = true;
     });
+    await _loadData();
   }
 
   Future<void> _openAllRequests() async {
@@ -409,8 +412,9 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       setState(() {
         _selectedForRemoveRequestId = null;
         _isRemoveMode = false;
-        _loadData();
+        _isLoading = true;
       });
+      await _loadData();
     } catch (error) {
       if (!mounted) return;
 
@@ -426,8 +430,9 @@ class _LeaveAttendanceScreenState extends State<LeaveAttendanceScreen> {
       setState(() {
         _selectedForRemoveRequestId = null;
         _isRemoveMode = false;
-        _loadData();
+        _isLoading = true;
       });
+      await _loadData();
     } finally {
       _isOpeningAllRequests = false;
     }

@@ -212,11 +212,23 @@ mixin _DataLoadingMixin
               .getPolicy(selectedWorkspaceId)
               .then((p) => p as dynamic)
               .catchError((_) => null),
+          _holidayRepo
+              .getHolidayConfig(selectedWorkspaceId)
+              .then((c) => c as dynamic)
+              .catchError((_) => null),
+          _holidayRepo
+              .getHolidays(selectedWorkspaceId)
+              .then((h) => h as dynamic)
+              .catchError((_) => null),
         ]);
 
         final List<Workspace> fetchedWorkspaces = results[0] as List<Workspace>;
         final GeofenceModel? fetchedGeofence = results[1] as GeofenceModel?;
         final PolicyModel? fetchedPolicy = results[2] as PolicyModel?;
+        final HolidayConfigModel? fetchedHolidayConfig =
+            results[3] as HolidayConfigModel?;
+        final List<HolidayModel>? fetchedHolidays =
+            results[4] as List<HolidayModel>?;
 
         if (fetchedWorkspaces.isNotEmpty) {
           final matching = fetchedWorkspaces.firstWhere(
@@ -288,6 +300,14 @@ mixin _DataLoadingMixin
               policyMap,
             );
           }
+        }
+
+        if (fetchedHolidayConfig != null) {
+          currentHolidayConfig = fetchedHolidayConfig;
+        }
+
+        if (fetchedHolidays != null) {
+          workspaceHolidays = fetchedHolidays;
         }
       }
     } catch (_) {}

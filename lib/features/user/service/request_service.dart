@@ -98,4 +98,24 @@ class RequestService {
       throw Exception('Unexpected error: $e');
     }
   }
+
+  Future<void> deleteRequest(String requestId) async {
+    final String endpoint = ApiEndpoints.requestById(requestId);
+
+    try {
+      final Response response = await _apiClient.delete(endpoint);
+
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception(
+          'Failed to delete request. Status: ${response.statusCode}',
+        );
+      }
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final serverMessage = _extractServerMessage(e.response?.data, e.message);
+      throw Exception('Network error [$statusCode]: $serverMessage');
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
 }

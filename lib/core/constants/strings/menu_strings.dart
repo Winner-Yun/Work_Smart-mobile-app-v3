@@ -50,6 +50,11 @@ const Map<String, String> menuStringsEn = {
   'request_details_title': 'Request Details',
   'submitted_on': 'Submitted {date}',
   'response_label': 'Response',
+  'delete_request_title': 'Delete Request?',
+  'delete_request_confirm_desc':
+      'This will permanently remove this pending request. This action cannot be undone.',
+  'delete_button': 'Delete',
+  'request_delete_failed': 'Failed to delete request',
 };
 
 const Map<String, String> menuStringsKm = {
@@ -103,4 +108,9 @@ const Map<String, String> menuStringsKm = {
   'request_details_title': 'ព័ត៌មានលម្អិតសំណើ',
   'submitted_on': 'បានដាក់ស្នើ {date}',
   'response_label': 'ការឆ្លើយតប',
+  'delete_request_title': 'លុបសំណើ?',
+  'delete_request_confirm_desc':
+      'សកម្មភាពនេះនឹងលុបសំណើដែលកំពុងរង់ចាំនេះជាអចិន្ត្រៃយ៍ ហើយមិនអាចត្រឡប់វិញបានទេ។',
+  'delete_button': 'លុប',
+  'request_delete_failed': 'មិនអាចលុបសំណើបានទេ',
 };

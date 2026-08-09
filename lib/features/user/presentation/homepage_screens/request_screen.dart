@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -216,6 +217,99 @@ class _RequestScreenState extends State<RequestScreen> {
       MaterialPageRoute(
         builder: (context) => RequestDetailScreen(request: request),
       ),
+    );
+  }
+
+  // Only a pending request can still be withdrawn — once it's been seen or
+  // actioned on, deleting it would erase the admin's response.
+  Future<void> _handleDeleteTap(RequestModel request) async {
+    final bool deleted = await _confirmDeleteRequest(request);
+    if (deleted) _removeRequestLocally(request);
+  }
+
+  Future<bool> _confirmDeleteRequest(RequestModel request) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Icon(
+          Icons.delete_outline_rounded,
+          color: AppColors.error,
+          size: 40,
+        ),
+        title: Text(
+          AppStrings.tr('delete_request_title'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          AppStrings.tr('delete_request_confirm_desc'),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(AppStrings.tr('cancel_button')),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    AppStrings.tr('delete_button'),
+                    style: const TextStyle(color: AppColors.textLight),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return false;
+
+    try {
+      await _requestRepo.deleteRequest(request.id);
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.error,
+            content: Text(
+              '${AppStrings.tr('request_delete_failed')}: ${e.toString().replaceFirst('Exception: ', '')}',
+              style: const TextStyle(color: AppColors.textLight),
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
+  void _removeRequestLocally(RequestModel request) {
+    setState(() {
+      _requests.removeWhere((r) => r.id == request.id);
+    });
+    unawaited(
+      _saveToCache(jsonEncode(_requests.map((r) => r.toJson()).toList())),
     );
   }
 
@@ -541,6 +635,9 @@ class _RequestScreenState extends State<RequestScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => _openRequestDetail(request),
+        onLongPress: request.status.toLowerCase() == 'pending'
+            ? () => _handleDeleteTap(request)
+            : null,
         focusColor: Colors.transparent,
         highlightColor: Colors.transparent,
         splashColor: Colors.transparent,
@@ -659,17 +756,38 @@ class _RequestScreenState extends State<RequestScreen> {
               ],
               const SizedBox(height: 10),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.access_time_rounded,
-                    size: 12,
-                    color: AppColors.textGrey,
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time_rounded,
+                        size: 12,
+                        color: AppColors.textGrey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _dateFormatter.format(request.createdAt),
+                        style: TextStyle(
+                          color: AppColors.textGrey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _dateFormatter.format(request.createdAt),
-                    style: TextStyle(color: AppColors.textGrey, fontSize: 12),
-                  ),
+                  if (request.status.toLowerCase() == 'pending')
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => _handleDeleteTap(request),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ],

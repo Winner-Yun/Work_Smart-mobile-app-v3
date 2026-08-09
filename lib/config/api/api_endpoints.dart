@@ -62,4 +62,10 @@ class ApiEndpoints {
 
   // CONFIG
   static const String configData = '/config/data';
+
+  // HOLIDAY
+  static String holidayConfig(String workspaceId) =>
+      '/workspace/$workspaceId/holiday-config';
+  static String workspaceHolidays(String workspaceId) =>
+      '/workspace/$workspaceId/holidays';
 }

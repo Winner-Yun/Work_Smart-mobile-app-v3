@@ -218,6 +218,48 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
     return !DateTime.now().isBefore(deadlineAt);
   }
 
+  // Blocks the scan card on weekends/public holidays per the workspace's
+  // holiday config, and on any date explicitly listed in workspaceHolidays.
+  bool get isTodayHoliday {
+    final now = DateTime.now();
+    final HolidayConfigModel? config = currentHolidayConfig;
+
+    if (config != null) {
+      switch (config.includeWeekend) {
+        case 'Sunday only':
+          if (now.weekday == DateTime.sunday) return true;
+          break;
+        case 'Saturday and Sunday':
+          if (now.weekday == DateTime.saturday ||
+              now.weekday == DateTime.sunday) {
+            return true;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (config == null || config.includePublicHolidays) {
+      if (workspaceHolidays.any((holiday) => holiday.isSameDate(now))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  String? get todayHolidayName {
+    final now = DateTime.now();
+    for (final holiday in workspaceHolidays) {
+      if (holiday.isSameDate(now)) return holiday.name;
+    }
+    return null;
+  }
+
+  String get todayHolidayLabel =>
+      todayHolidayName ?? AppStrings.tr('holiday_today_label');
+
   bool get isBeforeCheckInWindow {
     if (selectedAttendanceScanType != 'check_in') return false;
     if (_isTypeCompleted('check_in')) return false;
@@ -257,7 +299,9 @@ mixin _AttendanceScanMixin on _HomePageLogicState {
       ? AppStrings.tr('check_in')
       : AppStrings.tr('check_out');
 
-  String get selectedAttendanceActionText => isScanCooldownActive
+  String get selectedAttendanceActionText => isTodayHoliday
+      ? todayHolidayLabel
+      : isScanCooldownActive
       ? '${AppStrings.tr('wait')} ${_formatCooldownDuration(checkOutCooldownSeconds)}'
       : isBeforeCheckInWindow
       ? '${AppStrings.tr('check_in')} ${AppStrings.tr('opens_at')} $checkInWindowStartLabel'

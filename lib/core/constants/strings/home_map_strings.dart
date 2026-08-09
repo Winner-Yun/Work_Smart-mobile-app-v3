@@ -80,6 +80,7 @@ const Map<String, String> homeMapStringsEn = {
   'confirm_switch_workspace_title': 'Switch Workspace?',
   'confirm_switch_workspace_msg':
       'You\'ll leave this workspace and need to pick another one before you can check in again.',
+  'holiday_today_label': 'Holiday Today',
 };
 
 const Map<String, String> homeMapStringsKm = {
@@ -164,4 +165,5 @@ const Map<String, String> homeMapStringsKm = {
   'confirm_switch_workspace_title': 'ប្តូរកន្លែងធ្វើការ?',
   'confirm_switch_workspace_msg':
       'អ្នកនឹងចាកចេញពីកន្លែងធ្វើការនេះ ហើយត្រូវជ្រើសរើសកន្លែងធ្វើការផ្សេងទៀត មុននឹងអាចចុះវត្តមានបានម្តងទៀត។',
+  'holiday_today_label': 'ថ្ងៃឈប់សម្រាក',
 };

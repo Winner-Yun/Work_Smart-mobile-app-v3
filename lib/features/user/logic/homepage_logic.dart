@@ -20,17 +20,21 @@ import 'package:flutter_worksmart_app/features/user/presentation/homepage_screen
 import 'package:flutter_worksmart_app/features/user/repository/attendance_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/face_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/geofence_repository.dart';
+import 'package:flutter_worksmart_app/features/user/repository/holiday_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/policy_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/user_repository.dart';
 import 'package:flutter_worksmart_app/features/user/repository/workspace_repository.dart';
 import 'package:flutter_worksmart_app/features/user/service/attendance_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/face_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/geofence_service.dart';
+import 'package:flutter_worksmart_app/features/user/service/holiday_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/policy_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/user_service.dart';
 import 'package:flutter_worksmart_app/features/user/service/workspace_service.dart';
 import 'package:flutter_worksmart_app/shared/model/attendance_model.dart';
 import 'package:flutter_worksmart_app/shared/model/geofence_model.dart';
+import 'package:flutter_worksmart_app/shared/model/holiday_config_model.dart';
+import 'package:flutter_worksmart_app/shared/model/holiday_model.dart';
 import 'package:flutter_worksmart_app/shared/model/policy_model.dart';
 import 'package:flutter_worksmart_app/shared/model/user_model.dart';
 import 'package:flutter_worksmart_app/shared/model/workspace_model.dart';
@@ -64,6 +68,8 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
 
   late final AttendanceRepository _attendanceRepo;
 
+  late final HolidayRepository _holidayRepo;
+
   // Always set by re-reading DatabaseHelper directly — never trust a stale in-memory copy.
   bool hasLocalFaceEmbedding = false;
 
@@ -75,9 +81,14 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
 
   PolicyModel? currentPolicy;
 
+  HolidayConfigModel? currentHolidayConfig;
+
+  List<HolidayModel> workspaceHolidays = <HolidayModel>[];
+
   // Gates the scan card until real geofence/policy data arrives, so it never
   // checks the user in/out against fallback defaults right after a workspace switch.
-  bool get isWorkspaceSetupReady => currentGeofence != null && currentPolicy != null;
+  bool get isWorkspaceSetupReady =>
+      currentGeofence != null && currentPolicy != null;
 
   bool isRefreshing = false;
 
@@ -199,6 +210,7 @@ abstract class HomePageLogic extends _HomePageLogicState
     _workspaceRepo = WorkspaceRepository(WorkspaceService());
     _faceRepo = FaceRepository(FaceService());
     _attendanceRepo = AttendanceRepository(AttendanceService());
+    _holidayRepo = HolidayRepository(HolidayService());
     loggedInUserId = widget.loginData?['uid'];
     _loadAllData();
     setupOfficeMapObjects();
