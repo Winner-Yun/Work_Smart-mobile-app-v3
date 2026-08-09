@@ -57,7 +57,7 @@ mixin _DataLoadingMixin
       geofence['radius_meters'] ??
           geofence['radiusMeters'] ??
           geofence['radius'],
-      fallback: 50,
+      fallback: 0,
     );
     if (currentWorkspace != null &&
         currentWorkspace!.workspaceName.isNotEmpty) {
