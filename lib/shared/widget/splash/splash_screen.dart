@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:flutter_worksmart_app/config/app_colors.dart';
 import 'package:flutter_worksmart_app/core/constants/app_img.dart';
 import 'package:flutter_worksmart_app/core/constants/app_strings.dart';
@@ -79,7 +80,7 @@ class _SplashScreenState extends State<SplashScreen>
     _devModeChecked = true;
     bool developerMode = false;
     try {
-      // developerMode = await FlutterJailbreakDetection.developerMode;
+      developerMode = await FlutterJailbreakDetection.developerMode;
     } catch (_) {
       developerMode = false;
     }

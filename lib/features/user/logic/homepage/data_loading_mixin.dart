@@ -116,10 +116,7 @@ mixin _DataLoadingMixin
     deadlineScanMinutes = _parseNonNegativeInt(rawDeadlineScanMinutes);
 
     final dynamic rawRequiresCheckOut =
-        _readByKeys(policy, const [
-          'requires_check_out',
-          'requiresCheckOut',
-        ]) ??
+        _readByKeys(policy, const ['requires_check_out', 'requiresCheckOut']) ??
         _readByKeys(_officeConfigData, const [
           'requires_check_out',
           'requiresCheckOut',
@@ -328,7 +325,8 @@ mixin _DataLoadingMixin
       await _loadData();
       await _fetchMyAttendance();
       await setupOfficeMapObjects();
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       // Must clear both flags even on failure, or pull-to-refresh locks up permanently.
       if (mounted) {
         setState(() {
@@ -370,7 +368,8 @@ mixin _DataLoadingMixin
         await _fetchMyAttendance();
         await setupOfficeMapObjects();
       }
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       if (mounted) {
         setState(() {
           isRefreshing = false;

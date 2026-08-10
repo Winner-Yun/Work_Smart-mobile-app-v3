@@ -416,14 +416,23 @@ class _HomePageScreenState extends HomePageLogic {
                             color: Colors.amber.shade700,
                           ),
                           const SizedBox(width: 5),
-                          Text(
-                            '${scanRangeMeters.toInt()}m ${AppStrings.tr('zone')}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.amber.shade800,
-                            ),
-                          ),
+                          currentGeofence == null
+                              ? SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: Colors.amber.shade800,
+                                  ),
+                                )
+                              : Text(
+                                  '${scanRangeMeters.toInt()}m ${AppStrings.tr('zone')}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.amber.shade800,
+                                  ),
+                                ),
                         ],
                       ),
                     ),
