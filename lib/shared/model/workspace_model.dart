@@ -6,6 +6,7 @@ class Workspace {
   final int memberCount;
   final String? createdAt;
   final String? updatedAt;
+  final String? ownerName;
 
   Workspace({
     required this.id,
@@ -15,6 +16,7 @@ class Workspace {
     required this.memberCount,
     this.createdAt,
     this.updatedAt,
+    this.ownerName,
   });
 
   factory Workspace.fromJson(Map<String, dynamic> json) {
@@ -26,10 +28,11 @@ class Workspace {
       memberCount: json['member_count'] ?? 1,
       createdAt: json['created_at']?.toString(),
       updatedAt: json['updated_at']?.toString(),
+      ownerName: json['owner_name']?.toString(),
     );
   }
 
-  Workspace copyWith({int? memberCount}) {
+  Workspace copyWith({int? memberCount, String? ownerName}) {
     return Workspace(
       id: id,
       workspaceName: workspaceName,
@@ -38,6 +41,7 @@ class Workspace {
       memberCount: memberCount ?? this.memberCount,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      ownerName: ownerName ?? this.ownerName,
     );
   }
 
@@ -49,5 +53,6 @@ class Workspace {
     'member_count': memberCount,
     'created_at': createdAt,
     'updated_at': updatedAt,
+    'owner_name': ownerName,
   };
 }

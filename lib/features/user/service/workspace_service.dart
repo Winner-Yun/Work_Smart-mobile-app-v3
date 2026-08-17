@@ -39,21 +39,55 @@ class WorkspaceService {
   }
 
   Future<int?> fetchWorkspaceMemberCount(String workspaceId) async {
+    final info = await fetchWorkspaceMembersInfo(workspaceId);
+    return info.total;
+  }
+
+  Future<WorkspaceMembersInfo> fetchWorkspaceMembersInfo(
+    String workspaceId,
+  ) async {
     final String endpoint = ApiEndpoints.workspaceMembers(workspaceId);
 
     try {
       final Response response = await _apiClient.get(endpoint);
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) return WorkspaceMembersInfo();
 
       final dynamic data = response.data;
-      if (data is! Map<String, dynamic>) return null;
+      if (data is! Map<String, dynamic>) return WorkspaceMembersInfo();
 
-      final dynamic total = data['total'];
-      if (total is int) return total;
-      if (total is num) return total.toInt();
-      return null;
+      int? total;
+      final dynamic rawTotal = data['total'];
+      if (rawTotal is int) {
+        total = rawTotal;
+      } else if (rawTotal is num) {
+        total = rawTotal.toInt();
+      }
+
+      String? ownerName;
+      final dynamic members = data['members'];
+      if (members is List) {
+        for (final member in members) {
+          if (member is Map &&
+              member['role']?.toString().toLowerCase() == 'owner') {
+            final name = member['name']?.toString().trim();
+            if (name != null && name.isNotEmpty) {
+              ownerName = name;
+              break;
+            }
+          }
+        }
+      }
+
+      return WorkspaceMembersInfo(total: total, ownerName: ownerName);
     } catch (e) {
-      return null;
+      return WorkspaceMembersInfo();
     }
   }
+}
+
+class WorkspaceMembersInfo {
+  final int? total;
+  final String? ownerName;
+
+  WorkspaceMembersInfo({this.total, this.ownerName});
 }

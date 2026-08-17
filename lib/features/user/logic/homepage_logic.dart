@@ -218,7 +218,7 @@ abstract class HomePageLogic extends _HomePageLogicState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runStartupPermissionFlow();
-      _detectDeveloperModeOnHomepage();
+      // _detectDeveloperModeOnHomepage();
     });
   }
 

@@ -19,14 +19,17 @@ class WorkspaceRepository {
         .map((json) => Workspace.fromJson(json as Map<String, dynamic>))
         .toList();
 
-    // Backfill the real member count per workspace (see fetchWorkspaceMemberCount).
-    final List<int?> counts = await Future.wait(
-      workspaces.map((w) => _service.fetchWorkspaceMemberCount(w.id)),
+    // Backfill the real member count and owner name per workspace (see fetchWorkspaceMembersInfo).
+    final List<WorkspaceMembersInfo> membersInfo = await Future.wait(
+      workspaces.map((w) => _service.fetchWorkspaceMembersInfo(w.id)),
     );
 
     return [
       for (int i = 0; i < workspaces.length; i++)
-        counts[i] == null ? workspaces[i] : workspaces[i].copyWith(memberCount: counts[i]),
+        workspaces[i].copyWith(
+          memberCount: membersInfo[i].total,
+          ownerName: membersInfo[i].ownerName,
+        ),
     ];
   }
 }

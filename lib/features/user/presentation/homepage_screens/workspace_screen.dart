@@ -695,7 +695,10 @@ class _WorkspaceScreenState extends WorkspaceScreenLogic {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _userName.split(' ').first,
+                      (workspace.ownerName != null &&
+                              workspace.ownerName!.trim().isNotEmpty)
+                          ? workspace.ownerName!.split(' ').first
+                          : AppStrings.tr('unknown_owner'),
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,

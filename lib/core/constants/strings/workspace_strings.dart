@@ -16,6 +16,7 @@ const Map<String, String> workspaceStringsEn = {
   'enter_invite_code_button': 'Enter Invite Code',
   'enter_workspace_button': 'Enter Workspace',
   'load_data_failed_retry': 'Failed to load data. Please try again.',
+  'unknown_owner': 'Owner',
 };
 
 const Map<String, String> workspaceStringsKm = {
@@ -35,4 +36,5 @@ const Map<String, String> workspaceStringsKm = {
   'enter_invite_code_button': 'បញ្ចូលលេខកូដអញ្ជើញ',
   'enter_workspace_button': 'ចូលកន្លែងធ្វើការ',
   'load_data_failed_retry': 'មិនអាចផ្ទុកទិន្នន័យបានទេ។ សូមព្យាយាមម្តងទៀត។',
+  'unknown_owner': 'ម្ចាស់',
 };
