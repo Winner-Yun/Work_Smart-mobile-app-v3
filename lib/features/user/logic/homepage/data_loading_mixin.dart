@@ -378,24 +378,6 @@ mixin _DataLoadingMixin
     }
   }
 
-  /// Re-syncs attendance from the backend in place (e.g. after a face scan
-  /// returns), using the same skeleton loader as pull-to-refresh.
-  Future<void> refreshAttendanceFromServer() async {
-    if (mounted) {
-      setState(() {
-        isRefreshing = true;
-      });
-    }
-
-    await _fetchMyAttendance();
-
-    if (mounted) {
-      setState(() {
-        isRefreshing = false;
-      });
-    }
-  }
-
   /// Pulls today's attendance for the active workspace and replaces the shared
   /// in-memory `attendanceRecords` list, scoped to today so it skips paging history.
   Future<void> _fetchMyAttendance() async {

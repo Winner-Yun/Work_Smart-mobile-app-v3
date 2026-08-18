@@ -814,10 +814,10 @@ class _HomePageScreenState extends HomePageLogic {
                               applyDatabaseAttendanceScan(
                                 Map<String, dynamic>.from(result),
                               );
-                              await refreshAttendanceFromServer();
+                              await onRefresh();
                             } else if (result == true) {
                               markMockScanSuccess();
-                              await refreshAttendanceFromServer();
+                              await onRefresh();
                             }
                           }
                         : null,
