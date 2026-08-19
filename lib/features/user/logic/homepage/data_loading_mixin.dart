@@ -188,6 +188,45 @@ mixin _DataLoadingMixin
           _officeConfigData['policy'] = cachedPolicyMap;
         }
       }
+
+      // Scoped per workspace + day so a cache from yesterday (or another
+      // workspace) never gets read as if it were today's scan status.
+      if (selectedId != null && selectedId.isNotEmpty) {
+        final cachedAttendanceJson = prefs.getString(
+          'cached_homepage_attendance_$selectedId',
+        );
+        if (cachedAttendanceJson != null) {
+          final Map<String, dynamic> cached = jsonDecode(cachedAttendanceJson);
+          final List<dynamic> rawRecords = cached['date'] == _todayDateKey
+              ? ((cached['records'] as List<dynamic>?) ?? const [])
+              : const [];
+          setAttendanceRecords(
+            rawRecords
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList(),
+          );
+          isAttendanceDataReady = true;
+        }
+      }
+    } catch (_) {}
+  }
+
+  String get _todayDateKey {
+    final now = DateTime.now();
+    return "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+  }
+
+  Future<void> _saveCachedTodayAttendance(
+    String workspaceId,
+    List<Map<String, dynamic>> records,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'cached_homepage_attendance_$workspaceId',
+        jsonEncode({'date': _todayDateKey, 'records': records}),
+      );
     } catch (_) {}
   }
 
@@ -389,16 +428,28 @@ mixin _DataLoadingMixin
         workspaceId,
       );
       final String uid = currentUser.id;
-      setAttendanceRecords(
-        today == null
-            ? <Map<String, dynamic>>[]
-            : [today.toLegacyMap()..['uid'] = uid],
-      );
+      final List<Map<String, dynamic>> records = today == null
+          ? <Map<String, dynamic>>[]
+          : [today.toLegacyMap()..['uid'] = uid];
+      setAttendanceRecords(records);
+      await _saveCachedTodayAttendance(workspaceId, records);
 
       if (mounted) {
-        setState(_syncScanStateFromAttendanceData);
+        setState(() {
+          isAttendanceDataReady = true;
+          _syncScanStateFromAttendanceData();
+        });
       }
-    } catch (_) {}
+    } catch (_) {
+      // Fail open: a network hiccup shouldn't permanently lock the scan card
+      // behind the loading card. Pull-to-refresh (or the next auto refresh)
+      // will retry the fetch and correct the state once it succeeds.
+      if (mounted) {
+        setState(() {
+          isAttendanceDataReady = true;
+        });
+      }
+    }
   }
 
   // --- Getters for UI Consumption ---

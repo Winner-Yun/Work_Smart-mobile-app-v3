@@ -85,10 +85,10 @@ abstract class _HomePageLogicState extends State<HomePageScreen> {
 
   List<HolidayModel> workspaceHolidays = <HolidayModel>[];
 
-  // Gates the scan card until real geofence/policy data arrives, so it never
-  // checks the user in/out against fallback defaults right after a workspace switch.
+  bool isAttendanceDataReady = false;
+
   bool get isWorkspaceSetupReady =>
-      currentGeofence != null && currentPolicy != null;
+      currentGeofence != null && currentPolicy != null && isAttendanceDataReady;
 
   bool isRefreshing = false;
 

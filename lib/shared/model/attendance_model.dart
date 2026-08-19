@@ -184,9 +184,8 @@ class AttendanceModel {
       return raw.trim().toUpperCase();
     }
 
-    final DateTime? parsed = DateTime.tryParse(raw);
-    if (parsed == null) return '--:--';
-    final DateTime local = parsed.toLocal();
+    final DateTime? local = _parseUtcToLocal(raw);
+    if (local == null) return '--:--';
     final int hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
     final String minute = local.minute.toString().padLeft(2, '0');
     final String period = local.hour >= 12 ? 'PM' : 'AM';
@@ -195,9 +194,31 @@ class AttendanceModel {
 
   static String? _dateKeyFromIso(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
+    final DateTime? local = _parseUtcToLocal(raw);
+    if (local == null) return null;
+    return _formatDateKey(local);
+  }
+
+  // Backend timestamps are UTC, but some responses omit the `Z`/offset marker.
+  // DateTime.tryParse silently treats a marker-less string as local time, which
+  // would make .toLocal() a no-op and leave the raw UTC value on screen — so any
+  // timestamp that didn't parse as UTC is re-anchored to UTC before converting.
+  static DateTime? _parseUtcToLocal(String raw) {
     final DateTime? parsed = DateTime.tryParse(raw);
     if (parsed == null) return null;
-    return _formatDateKey(parsed.toLocal());
+    final DateTime utc = parsed.isUtc
+        ? parsed
+        : DateTime.utc(
+            parsed.year,
+            parsed.month,
+            parsed.day,
+            parsed.hour,
+            parsed.minute,
+            parsed.second,
+            parsed.millisecond,
+            parsed.microsecond,
+          );
+    return utc.toLocal();
   }
 
   static String _formatDateKey(DateTime dateTime) {

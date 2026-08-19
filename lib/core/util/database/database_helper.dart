@@ -718,6 +718,7 @@ class DatabaseHelper {
   /// Every per-screen cache key prefix, so a workspace switch/logout can sweep them all.
   static const List<String> _workspaceScopedCachePrefixes = [
     'cached_homepage_geofence_',
+    'cached_homepage_attendance_',
     'cached_tasks_',
     'cached_requests_',
     'cached_attendance_stats_',
