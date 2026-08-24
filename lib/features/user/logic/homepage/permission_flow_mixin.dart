@@ -71,7 +71,10 @@ mixin _PermissionFlowMixin on _HomePageLogicState, _MapLocationMixin {
   }
 
   Future<void> _detectDeveloperModeOnHomepage() async {
-    if (kIsWeb || _developerModeWarningShown || !mounted) {
+    if (kIsWeb ||
+        !Env.developerModeDetectionEnabled ||
+        _developerModeWarningShown ||
+        !mounted) {
       return;
     }
 
